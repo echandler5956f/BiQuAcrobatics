@@ -39,6 +39,7 @@ mu = 0.7;
 % GRF limits
 fz_bounds = [-25, 0;
              -25, 0;
+             -25, 0;
              -25, 0];
 
 % Acceleration due to gravity
@@ -105,9 +106,6 @@ p_feet = {};
 % Angular velocity of SRB w.r.t body frame (3x1)
 Omega = {};
 
-% Time derivative of angular velocity of SRB w.r.t body frame (3x1)
-DOmega = {};
-
 % Rotation matrix of the body frame (3x3)
 R = {};
 
@@ -119,7 +117,6 @@ for k = 1 : Nc
     dp_body = {dp_body{:}, MX.sym(['dp_body_k' num2str(k)],3,1)};
     p_feet = {p_feet{:}, MX.sym(['p_feet_k' num2str(k)],3,4)};
     Omega = {Omega{:}, MX.sym(['Omega_k' num2str(k)],3,1)}; 
-    DOmega = {DOmega{:}, MX.sym(['DOmega_k' num2str(k)],3,1)};
     R = {R{:}, MX.sym(['R_k' num2str(k)],3,3)};
     F = {F{:}, MX.sym(['F_k' num2str(k)],3,4)};
 end
@@ -134,13 +131,12 @@ dp_body0 = zeros(3,1);
 tmp = kin.fk([deg2rad(-5);deg2rad(5);deg2rad(5)]);
 p_feet0 = [legMask(tmp,1),legMask(tmp,2),legMask(tmp,3),legMask(tmp,4)];
 Omega0 = zeros(3,1);
-DOmega0 = zeros(3,1);
 R0 = eye(3);
 
 %% Final States
 
 p_bodyf = [0;0.03;0];
-p_feetg = p_feet0;
+p_feetf = p_feet0;
 Rf = eye(3);
 
 %% Reference Trajectory
@@ -156,18 +152,18 @@ end
 %% Contact Timing Optimization
 
 % Start with an empty NLP
-global g lbg ubg
+global w lbw ubw g lbg ubg
 w = {};
-w0 = [];
-lbw = [];
-ubw = [];
+w0 = {};
+lbw = {};
+ubw = {};
 J = 0;
 g = {};
-lbg = [];
-ubg = [];
+lbg = {};
+ubg = {};
 
-% Total time must be within our bounds. We only need to say this once
-addConstraints(sum(T), tMin, tMax);
+% Total time must be within our bounds
+addGeneralConstraints(T.sum(), tMin, tMax);
 
 for k = 1 : Nc
     %% Gather Decision Variables
@@ -187,9 +183,6 @@ for k = 1 : Nc
     % Angular velocity of SRB w.r.t body frame (3x1)
     Omega_k = Omega{1,k};
     
-    % Time derivative of angular velocity of SRB w.r.t body frame (3x1)
-    DOmega_k = DOmega{1,k};
-    
     % Rotation matrix of the body frame (3x3)
     R_k = R{1,k};
     
@@ -198,32 +191,63 @@ for k = 1 : Nc
 
     %% Add Constraints
 
+    % Add body bounding box constraints
+    addDesignVariableConstraints(p_body_k, p_body_bounds(:,1), ...
+        p_body_bounds(:,2));
+
     % Add friction cone, GRF, and foot position constraints to each leg
+    GRF = zeros(3,1);
     for leg = 1 : 4
-        addConstraints(abs(F_k(1,leg)/F_k(end,leg)), -inf, mu);
-        addConstraints(abs(F_k(2,leg)/F_k(end,leg)), -inf, mu);
-        addConstraints(F_k(3,leg), fz_bounds(leg,1), fz_bounds(leg,2));
-        addConstraints(abs(R_k*(p_feet_k(:,leg) - p_body_k) - ...
+        GRF = GRF + F_k(:,leg);
+        addGeneralConstraints(abs(F_k(1,leg)/F_k(3,leg)), -inf, mu);
+        addGeneralConstraints(abs(F_k(2,leg)/F_k(3,leg)), -inf, mu);
+        addDesignVariableConstraints(F_k(3,leg), fz_bounds(leg,1), ...
+            fz_bounds(leg,2));
+        addGeneralConstraints(abs(R_k*(p_feet_k(:,leg) - p_body_k) - ...
             p_feet_bar), zeros(3,1), r);
     end
 
-    % Add body bounding box constraints
-    addConstraints(p_body_k, p_body_bounds(:,1), p_body_bounds(:,2));
-
     % Discrete dynamics
-    if i < Nc
+    if k < Nc
         p_body_k1 = p_body{k+1};
         dp_body_k1 = dp_body{k+1};
+        Omega_k1 = Omega{k+1};
+        R_k1 = R{k+1};
         p_body_next = p_body_k + dp_body_k.*dt;
-        dp_body_next = dp_body_k + ((sum(F_k,2)+g_accel)./mass).*dt;
-        addConstraints(p_body_k1, p_body_next, p_body_next);
-        addConstraints(dp_body_k1, dp_body_next, dp_body_next);
+        dp_body_next = dp_body_k + ((GRF+g_accel)./mass).*dt;
+        accum1 = zeros(3,1);
+        for leg = 1 : 4
+            accum1 = accum1 + cross((p_feet_k(:,leg)-p_body_k), ...
+                F_k(:,leg));
+        end
+        OmegaSO3 = Omega_k.skew();
+        Omega_next = Omega_k + inv(inertia)*((transpose(R_k)*accum1) - ...
+            (OmegaSO3*inertia*Omega_k)).*dt;
+        R_next = R_k*approximateExpA(OmegaSO3.*dt,4);
+        addGeneralConstraints(p_body_k1, p_body_next, p_body_next);
+        addGeneralConstraints(dp_body_k1, dp_body_next, dp_body_next);
+        addGeneralConstraints(Omega_k1, Omega_next, Omega_next);
+        addGeneralConstraints(reshape(R_k1,9,1), reshape(R_next,9,1), ...
+            reshape(R_next,9,1));
     end
     
     % Final States
-    if i == Nc
-        addConstraints(R_k.reshape(1,9), reshape(Rf,1,9), reshape(Rf,1,9))
+    if k == Nc
+        addDesignVariableConstraints(p_body_k, p_bodyf, p_bodyf);
+        for leg = 1 : 4
+            addDesignVariableConstraints(p_feet_k(:,leg), ...
+                p_feetf(:,leg), p_feetf(:,leg));
+        end
+        addDesignVariableConstraints(R_k.reshape(9,1), reshape(Rf,9,1), ...
+            reshape(Rf,9,1))
     end
+
+    %% Objective Function
+    
+    % Calculate rotation matrix error term
+    e_R_k = logMap(transpose(R_ref(:,:,k))*R_k);
+    J = J + (eOmega.*transpose(Omega_k)*Omega_k) + ...
+            (eF.*transpose(GRF)*GRF) + (eR.*transpose(e_R_k)*e_R_k);
 end
 
 % Create an NLP solver
@@ -235,14 +259,14 @@ sol = solver('x0', w0, 'lbx', lbw, 'ubx', ubw, ...
              'lbg', lbg, 'ubg', ubg);
 w_opt = full(sol.x);
 
-function addConstraints(g_k, lbg_k, ubg_k)
+function addGeneralConstraints(g_k, lbg_k, ubg_k)
     global g lbg ubg
     if size(g_k,2) > 1 || size(lbg_k,2) > 1 || size(ubg_k,2) > 1
         disp("Invalid size of constraints. The constraints are one " + ...
             "column vector.");
     else
-        if (size(g_k) == size(lbg_k)) && (size(g_k) == size(ubg_k)) ...
-                && (size(lbg_k) == size(ubg_k))
+        if all(size(g_k) == size(lbg_k)) && all(size(g_k) == ...
+                size(ubg_k)) && all(size(lbg_k) == size(ubg_k))
             g = {g{:}, g_k};
             lbg = {lbg{:}, lbg_k};
             ubg = {ubg{:}, ubg_k};
@@ -251,6 +275,38 @@ function addConstraints(g_k, lbg_k, ubg_k)
                 "and lower bound constraints should match the size of g.");
         end
     end
+end
+
+function addDesignVariableConstraints(w_k, lbw_k, ubw_k)
+    global w lbw ubw
+    if size(w_k,2) > 1 || size(lbw_k,2) > 1 || size(ubw_k,2) > 1
+        disp("Invalid size of constraints. The constraints are one " + ...
+            "column vector.");
+    else
+        if all(size(w_k) == size(lbw_k)) && all(size(w_k) == ...
+                size(ubw_k)) && all(size(lbw_k) == size(ubw_k))
+            w = {w{:}, w_k};
+            lbw = {lbw{:}, lbw_k};
+            ubw = {ubw{:}, ubw_k};
+        else
+            disp("Invalid size of constraints. The number of upper " + ...
+                "and lower bound constraints should match the size of w.");
+        end
+    end
+end
+
+function expA = approximateExpA(A, deg)
+    expA = A;
+    for i = 0 : deg
+        expA = expA + (A.^i)/(factorial(i));
+    end
+end
+
+function w = logMap(R)
+    theta = acos((R.trace()-1)/2 );
+    skw = (R-transpose(R))/2/sin(theta);
+    w = skw.inv_skew();
+    skew(w*theta)
 end
 
 function i = getCurrentPhase(k, Nch)
