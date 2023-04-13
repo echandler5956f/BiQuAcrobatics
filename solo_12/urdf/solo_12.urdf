@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="solo_12">
+  <link name="worldRZ">
+  </link>
+
+  <joint name="CHEAT_MODE_RZ" type="revolute">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+		<parent link="worldRZ" />
+		<child link="worldX" />
+    <axis xyz="0 0 1" />
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+	</joint>
+
+  <link name="worldX">
+  </link>
+
+  <joint name="CHEAT_MODE_X" type="prismatic">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+		<parent link="worldX" />
+		<child link="worldZ" />
+    <axis xyz="1 0 0" />
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+	</joint>
+
+  <link name="worldZ">
+  </link>
+
+  <joint name="CHEAT_MODE_Z" type="prismatic">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+		<parent link="worldZ" />
+		<child link="base_link" />
+    <axis xyz="0 0 1" />
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+	</joint>
+
+  <link name="base_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/solo12/solo_12_base.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HAA JOINT -->
+  <joint name="FL_HAA" type="revolute">
+    <parent link="base_link"/>
+    <child link="FL_SHOULDER"/>
+    <!-- joints rotates around the x-axis -->
+    <axis xyz="1 0 0"/>
+    <origin rpy="0 0 0" xyz="0.2141 0.0875 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- SHOULDER LINK -->
+  <link name="FL_SHOULDER">
+    <visual>
+      <origin rpy="0 0 0" xyz="0.01950 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/solo12/solo12_hip_fe_fl.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HFE JOINT -->
+  <joint name="FL_HFE" type="revolute">
+    <parent link="FL_SHOULDER"/>
+    <child link="FL_UPPER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="-0.0195 0.014 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- UPPER LEG LINK -->
+  <link name="FL_UPPER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_upper_leg_left_side.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- KFE JOINT-->
+  <joint name="FL_KFE" type="revolute">
+    <parent link="FL_UPPER_LEG"/>
+    <child link="FL_LOWER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="0 0.03745 -0.16"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- LOWER LEG LINK -->
+  <link name="FL_LOWER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_lower_leg_v2_left_side.stl"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0 0 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HAA JOINT -->
+  <joint name="FR_HAA" type="revolute">
+    <parent link="base_link"/>
+    <child link="FR_SHOULDER"/>
+    <!-- joints rotates around the x-axis -->
+    <axis xyz="1 0 0"/>
+    <origin rpy="0 0 0" xyz="0.2141 -0.0875 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- SHOULDER LINK -->
+  <link name="FR_SHOULDER">
+    <visual>
+      <origin rpy="0 0 0" xyz="0.01950 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/solo12/solo12_hip_fe_fr.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HFE JOINT -->
+  <joint name="FR_HFE" type="revolute">
+    <parent link="FR_SHOULDER"/>
+    <child link="FR_UPPER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="-0.0195 -0.014 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- UPPER LEG LINK -->
+  <link name="FR_UPPER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_upper_leg_right_side.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- KFE JOINT-->
+  <joint name="FR_KFE" type="revolute">
+    <parent link="FR_UPPER_LEG"/>
+    <child link="FR_LOWER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="0 -0.03745 -0.16"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- LOWER LEG LINK -->
+  <link name="FR_LOWER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_lower_leg_v2_right_side.stl"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0 0 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HAA JOINT -->
+  <joint name="HL_HAA" type="revolute">
+    <parent link="base_link"/>
+    <child link="HL_SHOULDER"/>
+    <!-- joints rotates around the x-axis -->
+    <axis xyz="1 0 0"/>
+    <origin rpy="0 0 0" xyz="-0.2141 0.0875 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- SHOULDER LINK -->
+  <link name="HL_SHOULDER">
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.01950 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/solo12/solo12_hip_fe_hl.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HFE JOINT -->
+  <joint name="HL_HFE" type="revolute">
+    <parent link="HL_SHOULDER"/>
+    <child link="HL_UPPER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="0.0195 0.014 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- UPPER LEG LINK -->
+  <link name="HL_UPPER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_upper_leg_left_side.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- KFE JOINT-->
+  <joint name="HL_KFE" type="revolute">
+    <parent link="HL_UPPER_LEG"/>
+    <child link="HL_LOWER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="0 0.03745 -0.16"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- LOWER LEG LINK -->
+  <link name="HL_LOWER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_lower_leg_v2_left_side.stl"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0 0 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HAA JOINT -->
+  <joint name="HR_HAA" type="revolute">
+    <parent link="base_link"/>
+    <child link="HR_SHOULDER"/>
+    <!-- joints rotates around the x-axis -->
+    <axis xyz="1 0 0"/>
+    <origin rpy="0 0 0" xyz="-0.2141 -0.0875 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- SHOULDER LINK -->
+  <link name="HR_SHOULDER">
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.01950 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/solo12/solo12_hip_fe_hr.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HFE JOINT -->
+  <joint name="HR_HFE" type="revolute">
+    <parent link="HR_SHOULDER"/>
+    <child link="HR_UPPER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="0.0195 -0.014 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- UPPER LEG LINK -->
+  <link name="HR_UPPER_LEG">
+    <!-- UPPER LEG LINK VISUAL -->
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_upper_leg_right_side.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- KFE JOINT-->
+  <joint name="HR_KFE" type="revolute">
+    <parent link="HR_UPPER_LEG"/>
+    <child link="HR_LOWER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="0 -0.03745 -0.16"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- LOWER LEG LINK -->
+  <link name="HR_LOWER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_lower_leg_v2_right_side.stl"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0 0 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+</robot>
+
