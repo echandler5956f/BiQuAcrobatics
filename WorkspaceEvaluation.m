@@ -43,6 +43,6 @@ end
 figure
 hold on;
 scatter3(pos(1,:),pos(2,:),pos(3,:),'MarkerFaceColor','#EDB120') % front left
-% scatter3(pos(1,:),-pos(2,:),pos(3,:),'MarkerFaceColor','#4DBEEE') % front right
-% scatter3(-pos(1,:),pos(2,:),pos(3,:),'MarkerFaceColor','#77AC30') % back left
-% scatter3(-pos(1,:),-pos(2,:),pos(3,:),'MarkerFaceColor','#A2142F') % back right
+scatter3(pos(1,:),-pos(2,:),pos(3,:),'MarkerFaceColor','#4DBEEE') % front right
+scatter3(-pos(1,:),pos(2,:),pos(3,:),'MarkerFaceColor','#77AC30') % back left
+scatter3(-pos(1,:),-pos(2,:),pos(3,:),'MarkerFaceColor','#A2142F') % back right
