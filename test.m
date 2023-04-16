@@ -52,7 +52,7 @@ else
    X = X0;
    Q = 0;
    for j=1:M
-       [k1, k1_q] = f(X, U);
+       [k1, k1_q] = f(X, U)
        [k2, k2_q] = f(X + DT/2 * k1, U);
        [k3, k3_q] = f(X + DT/2 * k2, U);
        [k4, k4_q] = f(X + DT * k3, U);
