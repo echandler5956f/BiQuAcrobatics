@@ -7,10 +7,10 @@ import casadi.*
 %% Constant Parameters
 
 % Omega cost weight
-eOmega = 1;
+eOmega = 0.0875;
 
 % Force cost weight
-eF = 0.25;
+eF = 0.0009125;
 
 % Rotation error cost weight
 eR = 0.1;
@@ -25,7 +25,7 @@ tMax = 1.5;
 n_p = 2;
 
 % Predefined number of steps for the ith contact phase
-N = ones(n_p,1).*10;
+N = ones(n_p,1).*30;
 
 % Helper for checking what contact we are in
 Nch = cumsum(N);
@@ -37,9 +37,9 @@ Nc = sum(N);
 mu = 0.7;
 
 % GRF limits
-f_bounds = [-35, 35;
-            -35, 35;
-            -50, 50];
+f_bounds = [-75, 75;
+            -75, 75;
+            -100, 100];
 
 % Acceleration due to gravity
 g_accel = [0;0;-9.81];
@@ -51,9 +51,9 @@ p_body_bounds = [-1.0, 1.0;
                  -eps, 0.625];
 
 % Velocity bounds to make the problem more solvable
-dp_body_bounds = [-5.0, 5.0;
-                  -5.0, 5.0;
-                  -5.0, 5.0];
+dp_body_bounds = [-3, 3;
+                  -3, 3;
+                  -20.0, 20.0];
 
 % Simple bounding box for all feet
 p_feet_bounds = [-1.0, 1.0;
@@ -61,14 +61,14 @@ p_feet_bounds = [-1.0, 1.0;
                  -eps, 1.0];
 
 % Angular velocity bounds to make the problem more solvable
-Omega_bounds = [-5, 5;
-                -5, 5;
-                -5, 5];
+Omega_bounds = [-1, 1;
+                -1, 1;
+                -1, 1];
 
 % Time derivative angular velocity bounds to make the problem more solvable
-DOmega_bounds = [-10, 10;
-                -10, 10;
-                -10, 10];
+DOmega_bounds = [-4, 4;
+                -4, 4;
+                -4, 4];
 
 % The sth foot position is constrained in a sphere of radius r to satisfy 
 % joint limits. This parameter is the center of the sphere w.r.t the COM
@@ -84,8 +84,8 @@ mass = 2.50000279;
 
 % Inertia of SRB
 inertia = [3.09249e-2, -9.00101e-7, 1.865287e-5;
-         -8.00101e-7, 5.106100e-2, 1.245813e-4;
-         1.865287e-5, 1.245813e-4, 6.939757e-2];
+           -8.00101e-7, 5.106100e-2, 1.245813e-4;
+           1.865287e-5, 1.245813e-4, 6.939757e-2];
 invinertia = pinv(inertia);
 
 % Kinematics
@@ -148,20 +148,67 @@ for k = 1 : Nc
 end
 
 % Function to get the matrix log transform (SO(3) -> so(3))
+index_arg = SX.sym('index_arg');
 R_arg = SX.sym('R_arg',3,3);
-% log_map = Function.if_else(['log_map' num2str(k)], ...
-%     Function(['f_true' num2str(k)],{R_arg}, {zeros(3,3)}), ...
-%     Function(['f_false' num2str(k)],{R_arg}, ...
+q_arg = SX.sym('q_arg',4,1);
+% test_arg = SX.sym('test_arg',3,1);
+% log_map = Function.if_else('log_map', ...
+%     Function('f_true', {R_arg}, {zeros(3,3)}), ...
+%     Function('f_false', {R_arg}, ...
 %     {vex(R_arg-transpose(R_arg)).*(acos((trace(R_arg)-1)/2)/ ...
 %     (2*sin(acos((trace(R_arg)-1)/2))))}));
-log_map = Function.if_else(['log_map' num2str(k)], ...
-    Function(['f_true' num2str(k)],{R_arg}, ...
-    {vex(R_arg-transpose(R_arg)).*((1/2) + ...
-    (1/12)*((acos((trace(R_arg)-1)/2))^2) + ...
-    (7/720)*((acos((trace(R_arg)-1)/2))^4))}), ...
-    Function(['f_false' num2str(k)],{R_arg}, ...
-    {vex(R_arg-transpose(R_arg)).*(acos((trace(R_arg)-1)/2)/ ...
-    (2*(1/2)*sqrt((3-R_arg.trace())*(1+R_arg.trace()))))}));
+% log_map = Function.if_else('log_map', ...
+%     Function('f_true', {R_arg}, ...
+%     {vex(R_arg-transpose(R_arg)).*((1/2) + ...
+%     (1/12)*((acos((trace(R_arg)-1)/2))^2) + ...
+%     (7/720)*((acos((trace(R_arg)-1)/2))^4))}), ...
+%     Function('f_false', {R_arg}, ...
+%     {vex(R_arg-transpose(R_arg)).*(acos((trace(R_arg)-1)/2)/ ...
+%     (2*(1/2)*sqrt((3-R_arg.trace())*(1+R_arg.trace()))))}));
+% log_map = Function('log_map', {R_arg}, ...
+%     {vex(R_arg-transpose(R_arg)).*((1/2) + ...
+%     (1/12)*((acos((trace(R_arg)-1)/2))^2) + ...
+%     (7/720)*((acos((trace(R_arg)-1)/2))^4))});
+
+f_000 = [sqrt(1+trace(R_arg))/2,; ...
+        ((1/2)/(sqrt(1+trace(R_arg)))* ...
+        vex(R_arg-transpose(R_arg)))];
+f_001 = [((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(3,2)-R_arg(2,3)); ...
+         ((1/2)*sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3))); ...
+         ((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(2,1)+R_arg(1,2)); ...
+         ((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(3,1)+R_arg(1,3))];
+f_010 = [((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(1,3)-R_arg(3,1)); ...
+         ((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(1,2)+R_arg(2,1)); ...
+         ((1/2)*sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3))); ...
+         ((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(3,2)+R_arg(2,3))];
+f_011 = [((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(2,1)-R_arg(1,2)); ...
+         ((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(1,3)+R_arg(3,1)); ...
+         ((1/2)/sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))*...
+            (R_arg(2,3)+R_arg(3,2)); ...
+         ((1/2)*sqrt(1+R_arg(1,1)-R_arg(2,2)-R_arg(3,3)))];
+f_master1 = [f_000,f_001,f_010,f_011];
+f_master_cell1 = horzsplit(f_master1);
+f_c1 = conditional(index_arg,f_master_cell1,0,false);
+matrix_to_quat = Function('matrix_to_quat',{index_arg,R_arg},{f_c1});
+
+f_11 = ((2/q_arg(1))-(2/3)*((norm(q_arg(2:4))^2)/ ...
+        (q_arg(1)^3))).*q_arg(2:4);
+f_10 = 4*atan2(norm(q_arg(2:4)), (q_arg(1)+ ...
+       sqrt((q_arg(1)^2)+(norm(q_arg(2:4))^2)))).* ...
+       (q_arg(2:4)/norm(q_arg(2:4)));
+f_master2 = [f_11,f_10];
+f_master_cell2 = horzsplit(f_master2);
+f_c2 = conditional(index_arg,f_master_cell2,0,false);
+quat_to_axis_angle = Function('quat_to_axis_angle', ...
+    {index_arg,q_arg},{f_c2});
 
 % Optimal contact timing for the ith contact phase (n_px1)
 T = SX.sym('T',n_p,1);
@@ -170,7 +217,7 @@ T = SX.sym('T',n_p,1);
 
 p_body0 = [0;0;0.35];
 dp_body0 = zeros(3,1);
-R0 = eul2rotm([deg2rad(-0.2),deg2rad(0.1),deg2rad(-5)], 'XYZ');
+R0 = eul2rotm([deg2rad(-0.2),deg2rad(0.1),deg2rad(5)], 'XYZ');
 tmp = kin.fk([deg2rad(-5);deg2rad(5);deg2rad(5)]);
 p_feet0 = [p_body0 + R0*legMask(tmp,1),p_body0 + R0*legMask(tmp,2), ...
     p_body0 + R0*legMask(tmp,3), p_body0 + R0*legMask(tmp,4)];
@@ -179,9 +226,9 @@ DOmega0 = zeros(3,1);
 
 %% Final States
 
-p_bodyf = [bodyHalfLength;0;0.35];
-Rf = eul2rotm([deg2rad(0),deg2rad(0),deg2rad(15)], 'XYZ');
-tmp = kin.fk([deg2rad(-5);deg2rad(5);deg2rad(5)]);
+p_bodyf = [bodyHalfLength*2;-bodyHalfLength;0.25];
+Rf = eul2rotm([deg2rad(2),deg2rad(-6),deg2rad(-30)], 'XYZ');
+tmp = kin.fk([deg2rad(-20);deg2rad(30);deg2rad(5)]);
 p_feetf = [p_bodyf + Rf*legMask(tmp,1),p_bodyf + Rf*legMask(tmp,2), ...
     p_bodyf + Rf*legMask(tmp,3), p_bodyf + Rf*legMask(tmp,4)];
 
@@ -270,9 +317,15 @@ for k = 1 : Nc
                 p_body_bounds(:,2), p_body0, 'p_body');
     
             for leg = 1 : 4
-                addDesignConstraintsAndInit(p_feet_k(:,leg), ...
-                    p_feet_bounds(:,1), p_feet_bounds(:,2), ...
-                    p_feet0(:,leg), 'p_feet');
+                if i == 1
+                    addDesignConstraintsAndInit(p_feet_k(:,leg), ...
+                        p_feet0(:,leg), p_feet0(:,leg), ...
+                        p_feet0(:,leg), 'p_feet');
+                else
+                    addDesignConstraintsAndInit(p_feet_k(:,leg), ...
+                        p_feet_bounds(:,1), p_feet_bounds(:,2), ...
+                        randInBounds(p_feet_bounds), 'p_feet');
+                end
             end
     
             % Add dummy rotation constraints
@@ -289,9 +342,9 @@ for k = 1 : Nc
             tau = tau + cross(F_k(:,leg),(p_body_k-p_feet_k(:,leg)));
             if i == 1
                 grf = grf + F_k(:,leg);
+                addGeneralConstraints(abs(F_k(1,leg)/F_k(3,leg)), 0, mu);
+                addGeneralConstraints(abs(F_k(2,leg)/F_k(3,leg)), 0, mu);
             end
-            addGeneralConstraints(abs(F_k(1,leg)/F_k(3,leg)), 0, mu);
-            addGeneralConstraints(abs(F_k(2,leg)/F_k(3,leg)), 0, mu);
             addGeneralConstraints(abs(R_k*(p_feet_k(:,leg) - p_body_k) ...
                 - p_feet_bar(:,leg)), zeros(3,1), r);
             addDesignConstraintsAndInit(F_k(:,leg), f_bounds(:,1), ...
@@ -311,7 +364,7 @@ for k = 1 : Nc
         Omega_next = Omega_k + DOmega_k.*dt;
         DOmega_next = DOmega_k + invinertia*((transpose(R_k)*tau) - ...
             cross(Omega_k,(inertia*Omega_k))).*dt;
-        R_next = R_k*approximateExpA(skew(Omega_k.*dt),4);
+        R_next = R_k*approximateExpA(skew(Omega_k.*dt),20);
 
         addGeneralConstraints(p_body_k1-p_body_next, zeros(3,1), ...
             zeros(3,1));
@@ -358,9 +411,22 @@ for k = 1 : Nc
     
     % Calculate rotation matrix error term
     R_err_k = transpose(R_ref(:,:,k))*R_k;
+    s1 = trace(R_err_k) > 0;
+    s2 = (R_err_k(1,1)>=R_err_k(2,2))*(R_err_k(1,1)>=R_err_k(3,3));
+    s3 = (R_err_k(2,2)>R_err_k(1,1))*(R_err_k(2,2)>=R_err_k(3,3));
+    s4 = (R_err_k(3,3)>R_err_k(1,1))*(R_err_k(3,3)>R_err_k(2,2));
+    index_s = -1 + s1 + ...
+              2*(~s1)*s2 + ...
+              3*(~s1)*(~s2)*s3 + ...
+              4*(~s1)*(~s2)*(~s3)*s4;
+    q_k = matrix_to_quat(index_s, R_err_k);
+    q_k = sign(q_k(1)).*q_k;
+    e_R_k = quat_to_axis_angle(0, q_k);
     % e_R_k = log_map(abs(3-R_err_k.trace())<=10e-8, R_err_k);
     % e_R_k = log_map(acos((trace(R_err_k)-1)/2)==0, R_err_k);
-    e_R_k = vex(abs(R_ref(:,:,k) - R_k));
+    % e_R_k = log_map(R_err_k);
+    % e_R_k = vex(abs(R_ref(:,:,k) - R_k));
+    % e_R_k = vex(abs(R_err_k - eye(3)));
     J = J + (eOmega.*transpose(Omega_k)*Omega_k) + ...
         (eF.*transpose(grf)*grf) + (eR.*transpose(e_R_k)*e_R_k);
 end
@@ -369,7 +435,8 @@ end
 
 % Create an NLP solver
 options = struct('expand', true, 'ipopt', struct('max_iter', 100000, ...
-    'fixed_variable_treatment', 'make_constraint', 'print_level', 5));
+    'fixed_variable_treatment', 'make_constraint', ...
+    'mumps_mem_percent', 10000, 'print_level', 5));
 problem = struct('f', J, 'x', vertcat(w{:}), 'g', vertcat(g{:}));
 solver = nlpsol('solver', 'ipopt', problem, options);
 
@@ -399,19 +466,22 @@ qj = [0;0;0;       % Leg 1
       0;0;0];      % Leg 4
 qcj = [qc;qj];
 initVisualizer(robot, qcj);
-r1 = rateControl((N(1)/T_opt(1)));
-r2 = rateControl((N(2)/T_opt(2)));
+slowDown = 2;
+r1 = rateControl((N(1)/T_opt(1))/slowDown);
+r2 = rateControl((N(2)/T_opt(2))/slowDown);
 plts = [];
-for k = 1 : Nc
-    i = getCurrentPhase(k, Nch);
-    qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
-    qcj = [qc; qj];
-    plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r(1), ...
-        R_opt(:,:,k),F_opt(:,:,k),plts);
-    if i == 1
-        waitfor(r1);
-    else
-        waitfor(r2);
+while true
+    for k = 1 : Nc
+        i = getCurrentPhase(k, Nch);
+        qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
+        qcj = [qc; qj];
+        plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r(1), ...
+            R_opt(:,:,k),F_opt(:,:,k),plts);
+        if i == 1
+            waitfor(r1);
+        else
+            waitfor(r2);
+        end
     end
 end
 
