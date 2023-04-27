@@ -101,6 +101,8 @@ class CTConstraints:
             self.g = vertcat(self.g, g_k)
             self.lbg = vertcat(self.lbg, lbg_k)
             self.ubg = vertcat(self.ubg, ubg_k)
+        else:
+            print("Wrong size in general constraints dummy")
 
     def add_design_constraints(self, w_k, lbw_k, ubw_k, w0_k, field_name):
         n = w_k.size1()
@@ -114,6 +116,8 @@ class CTConstraints:
             f_field.w0 = vertcat(f_field.w0, w0_k)
             f_field.indices = vertcat(f_field.indices, range(a, b))
             self.current_index = b
+        else:
+            print("Wrong size in design constraints dummy")
 
     def unpack_indices(self, w_opt, field_name):
         f_field = self.fields[field_name]
@@ -233,16 +237,16 @@ dp_body_bounds = np.array([[-3, 3],
 # Simple bounding box for all feet
 p_feet_bounds = np.array([[-1.0, 1.0],
                           [-1.0, 1.0],
-                          [-eps, 1.0],
+                          [-eps, 0.5],
                           [-1.0, 1.0],
                           [-1.0, 1.0],
-                          [-eps, 1.0],
+                          [-eps, 0.5],
                           [-1.0, 1.0],
                           [-1.0, 1.0],
-                          [-eps, 1.0],
+                          [-eps, 0.5],
                           [-1.0, 1.0],
                           [-1.0, 1.0],
-                          [-eps, 1.0]])
+                          [-eps, 0.5]])
 
 # Angular velocity bounds to make the problem more solvable
 Omega_bounds = np.array([[-1, 1],
@@ -299,6 +303,12 @@ R = []
 
 # GRF on each foot (3x4)
 F = []
+
+# Logarithm function callback
+log_callback_fun_helper = []
+
+# Rotation matrix scalarized error function (3x3 -> 1x1)
+log_callback_fun = []
 
 for k in range(Nc):
     p_body = vertcat(p_body, MX.sym('p_body_k{}'.format(k), 3, 1))
@@ -367,6 +377,8 @@ for k in range(Nc):
     # Rotation matrix of the body frame (3x3)
     R_k = reshape(R[:, 3 * k: 3 * (k + 1)], (3, 3))
 
+    R_ref_k = R_ref[k].as_matrix()
+
     # GRF on each foot (3x4)
     F_k = F[:, 4 * k: 4 * (k + 1)]
 
@@ -379,8 +391,8 @@ for k in range(Nc):
             # Add body bounding box constraints
             constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1], p_body0, 'p_body')
             if i == 0:
-                constraints.add_design_constraints(reshape(p_feet_k, (12, 1)), p_feet0, p_feet0,
-                                                   p_feet0, 'p_feet')
+                constraints.add_design_constraints(reshape(p_feet_k, (12, 1)), np.reshape(p_feet0, (12, 1)),
+                                                   np.reshape(p_feet0, (12, 1)), np.reshape(p_feet0, (12, 1)), 'p_feet')
             else:
                 constraints.add_design_constraints(reshape(p_feet_k, (12, 1)), p_feet_bounds[:, 0], p_feet_bounds[:, 1],
                                                    rand_in_bounds(p_feet_bounds), 'p_feet')
@@ -459,9 +471,12 @@ for k in range(Nc):
 
         # Objective Function
 
-        # Calculate rotation matrix error term
-        log_callback_k = LogMap('log_callback_k{}'.format(k), R_ref, {"enable_fd": True})
+        log_callback_k = LogMap('log_callback_k{}'.format(k), R_ref_k, {"enable_fd": True})
         fun_k = Function('fun_k{}'.format(k), [R_k], [log_callback_k(R_k)])
+
+        log_callback_fun_helper = [log_callback_fun_helper, log_callback_k]
+        log_callback_fun = [log_callback_fun, fun_k]
+
         J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + (eF * mtimes(transpose(grf), grf)) + (eR * fun_k(R_k))
 
 x = []
@@ -474,8 +489,6 @@ for field in fields:
     lbx = vertcat(lbx, constraints.fields[field].lbw)
     ubx = vertcat(ubx, constraints.fields[field].ubw)
     x0 = vertcat(x0, constraints.fields[field].w0)
-
-print(x)
 
 # Initialize an NLP solver
 nlp = {'x': x, 'f': J, 'g': constraints.g}
