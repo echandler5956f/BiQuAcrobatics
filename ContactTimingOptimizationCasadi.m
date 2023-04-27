@@ -58,7 +58,7 @@ dp_body_bounds = [-3, 3;
 % Simple bounding box for all feet
 p_feet_bounds = [-1.0, 1.0;
                  -1.0, 1.0;
-                 -eps, 1.0];
+                 -eps, 0.5];
 
 % Angular velocity bounds to make the problem more solvable
 Omega_bounds = [-1, 1;
@@ -67,8 +67,8 @@ Omega_bounds = [-1, 1;
 
 % Time derivative angular velocity bounds to make the problem more solvable
 DOmega_bounds = [-4, 4;
-                -4, 4;
-                -4, 4];
+                 -4, 4;
+                 -4, 4];
 
 % The sth foot position is constrained in a sphere of radius r to satisfy 
 % joint limits. This parameter is the center of the sphere w.r.t the COM
@@ -644,7 +644,7 @@ function r = randInBounds(bounds)
     n = length(bounds);
     r = zeros(n,1);
     for i=1:n
-        r(i,1) = (bounds(2)-bounds(1))*rand(1) + bounds(1);
+        r(i,1) = (bounds(i,2)-bounds(i,1))*rand(1) + bounds(i,1);
     end
 end
 

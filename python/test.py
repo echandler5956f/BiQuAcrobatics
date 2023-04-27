@@ -128,7 +128,6 @@ for k in range(N):
         f = f + u_weight*mtimes(transpose(u_k), u_k)
         x_next = mtimes(x_k, approximate_exp_a(skew(u_k*dt), 20))
         x_k1 = reshape(x[k*9:(k+1)*9], 3, 3)
-        # print(reshape(x_k1-x_next, 9, 1))
         g = vertcat(g, reshape(x_k1-x_next, 9, 1))
         lbg = vertcat(lbg, DM(np.zeros((9, 1))))
         ubg = vertcat(ubg, DM(np.zeros((9, 1))))
