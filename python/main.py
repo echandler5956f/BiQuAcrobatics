@@ -114,7 +114,7 @@ class CTConstraints:
             f_field.lbw = vertcat(f_field.lbw, lbw_k)
             f_field.ubw = vertcat(f_field.ubw, ubw_k)
             f_field.w0 = vertcat(f_field.w0, w0_k)
-            f_field.indices = vertcat(f_field.indices, range(a, b))
+            f_field.indices = vertcat(f_field.indices, range(a, b)).full()
             self.current_index = b
         else:
             print("Wrong size in design constraints dummy")
@@ -124,14 +124,14 @@ class CTConstraints:
         n = len(f_field.indices)
         s1, s2 = f_field.size
         if f_field.split_flag:
-            opt_design_vars = np.zeros((s1, s2, floor(n / s2)))
-            for i in range(floor(n / s2)):
+            opt_design_vars = np.zeros((s1, s2, int(floor(n / s2))))
+            for i in range(int(floor(n / s2))):
                 for j in range(s2):
                     tmp_var = f_field.indices[i:i + s2 - 1]
                     opt_design_vars[:, j, i] = reshape(w_opt[vertcat(tmp_var[j]), 1], s1, 1)
             return opt_design_vars
         else:
-            return np.reshape(w_opt[f_field.indices], (s1, s2, n))
+            return np.reshape(w_opt[f_field.indices], (s1, s2, int(floor(n / s1))))
 
 
 def approximate_exp_a(a, deg):
@@ -192,7 +192,7 @@ tMax = 1.5
 n_p = 2
 
 # Predefined number of steps for the ith contact phase
-N = np.ones((n_p, 1), dtype=int) * 3
+N = np.ones((n_p, 1), dtype=int) * 20
 
 # Helper for checking what contact we are in
 Nch = np.cumsum(N)
@@ -332,7 +332,7 @@ constraints.add_design_constraints(T, np.ones((n_p, 1)) * (tMin / (n_p + 1)), np
 # Initial States
 p_body0 = [0, 0, 0.35]
 dp_body0 = np.zeros((3, 1))
-R0 = rp.from_euler('xyz', [-0.2, 0.1, 5], True)
+R0 = rp.from_euler('xyz', [0, 0, 0], True)
 tmp = [0.1345, 0.1873, 0.0313]
 p_feet0 = np.array([p_body0 + np.matmul(R0.as_matrix(), leg_mask(tmp, 1)),
                     p_body0 + np.matmul(R0.as_matrix(), leg_mask(tmp, 2)),
@@ -342,9 +342,9 @@ Omega0 = np.zeros((3, 1))
 DOmega0 = np.zeros((3, 1))
 
 # Final States
-p_bodyf = [0.388, -0.194, 0.25]
-Rf = rp.from_euler('xyz', [2, -6, -30], True)
-tmp = [0.5470, 0.0113, 0.0339]
+p_bodyf = [0.388, 0, 0.35]
+Rf = rp.from_euler('xyz', [0, 0, 0], True)
+tmp = [0.1345+0.388, 0.1873, 0.0313]
 p_feetf = np.array([p_bodyf + np.matmul(Rf.as_matrix(), leg_mask(tmp, 1)),
                     p_bodyf + np.matmul(Rf.as_matrix(), leg_mask(tmp, 2)),
                     p_bodyf + np.matmul(Rf.as_matrix(), leg_mask(tmp, 3)),
@@ -495,17 +495,31 @@ nlp = {'x': x, 'f': J, 'g': constraints.g}
 
 # Solver options
 opts = {}
+# opts["verbose"] = True
+opts["ipopt"] = {"max_iter": 10,
+                 "fixed_variable_treatment": "make_constraint",
+                 "hessian_approximation": "limited-memory",
+                 "mumps_mem_percent": 10000,
+                 "print_level": 5}
 
 # Allocate a solver
 solver = nlpsol("solver", "ipopt", nlp, opts)
 
 # Solve the NLP
 sol = solver(x0=x0, lbg=constraints.lbg, ubg=constraints.ubg, lbx=lbx, ubx=ubx)
+solx = sol["x"]
+p_body_opt = constraints.unpack_indices(solx, "p_body")
+dp_body_opt = constraints.unpack_indices(solx, "dp_body")
+p_feet_opt = constraints.unpack_indices(solx, "p_feet")
+Omega_opt = constraints.unpack_indices(solx, "Omega")
+DOmega_opt = constraints.unpack_indices(solx, "DOmega")
+R_opt = constraints.unpack_indices(solx, "R")
+F_opt = constraints.unpack_indices(solx, "F")
+T_opt = constraints.unpack_indices(solx, "T")
 
 # Print solution
 print("-----")
-solx = sol["x"]
 print("primal solution = ")
 print(solx)
 print("-----")
-
+np.savetxt('solution.csv', solx, delimiter=',')
