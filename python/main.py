@@ -114,7 +114,7 @@ class CTConstraints:
             f_field.lbw = vertcat(f_field.lbw, lbw_k)
             f_field.ubw = vertcat(f_field.ubw, ubw_k)
             f_field.w0 = vertcat(f_field.w0, w0_k)
-            f_field.indices = vertcat(f_field.indices, range(a, b)).full()
+            f_field.indices = vertcat(f_field.indices, range(a, b)).full().flatten()
             self.current_index = b
         else:
             print("Wrong size in design constraints dummy")
@@ -125,13 +125,14 @@ class CTConstraints:
         s1, s2 = f_field.size
         if f_field.split_flag:
             opt_design_vars = np.zeros((s1, s2, int(floor(n / s2))))
+            # print(f_field.indi
             for i in range(int(floor(n / s2))):
                 for j in range(s2):
                     tmp_var = f_field.indices[i:i + s2 - 1]
-                    opt_design_vars[:, j, i] = reshape(w_opt[vertcat(tmp_var[j]), 1], s1, 1)
+                    opt_design_vars[:, j, i] = np.reshape(w_opt[tmp_var], s1)
             return opt_design_vars
         else:
-            return np.reshape(w_opt[f_field.indices], (s1, s2, int(floor(n / s1))))
+            return np.reshape(w_opt[f_field.indices], (s1, s2, int(floor(n / (s1*s2)))))
 
 
 def approximate_exp_a(a, deg):
@@ -496,7 +497,7 @@ nlp = {'x': x, 'f': J, 'g': constraints.g}
 # Solver options
 opts = {}
 # opts["verbose"] = True
-opts["ipopt"] = {"max_iter": 10,
+opts["ipopt"] = {"max_iter": 5,
                  "fixed_variable_treatment": "make_constraint",
                  "hessian_approximation": "limited-memory",
                  "mumps_mem_percent": 10000,

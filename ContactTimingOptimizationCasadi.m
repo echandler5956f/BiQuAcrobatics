@@ -4,6 +4,9 @@ clear all; clc; close all
 
 import casadi.*
 
+% Whether to use the python solution.csv output
+usePython = false;
+
 %% Constant Parameters
 
 % Omega cost weight
@@ -25,7 +28,7 @@ tMax = 1.5;
 n_p = 2;
 
 % Predefined number of steps for the ith contact phase
-N = ones(n_p,1).*30;
+N = ones(n_p,1).*20;
 
 % Helper for checking what contact we are in
 Nch = cumsum(N);
@@ -447,6 +450,29 @@ w_opt = full(sol.x);
 
 %% Unpack Solution
 
+if usePython
+    % Set up the Import Options and import the data
+    opts = delimitedTextImportOptions("NumVariables", 1);
+    
+    % Specify range and delimiter
+    opts.DataLines = [1, Inf];
+    opts.Delimiter = ",";
+    
+    % Specify column names and types
+    opts.VariableNames = "e02";
+    opts.VariableTypes = "double";
+    
+    % Specify file level properties
+    opts.ExtraColumnsRule = "ignore";
+    opts.EmptyLineRule = "read";
+
+    % Import the data
+    w_opt = table2array(readtable("C:\Users\quant\OneDrive\Documents\PlatformIO\Projects\BiQuAcrobatics\python\solution.csv", opts));
+
+    % Clear temporary variables
+    clear opts
+end
+
 p_body_opt = unpackIndices(w_opt, p_body_idx, 3, 1, false);
 dp_body_opt = unpackIndices(w_opt, dp_body_idx, 3, 1, false);
 p_feet_opt = unpackIndices(w_opt, p_feet_idx, 3, 4, true);
@@ -528,6 +554,8 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
                 color = 'b';
             case 4
                 color = 'y';
+            otherwise
+                disp("ERROR")
         end
         plts = [plts; quiver3(-p_feet(1,leg),-p_feet(2,leg), ...
             p_feet(3,leg), -F(1,leg),-F(2,leg),F(3,leg), ...
