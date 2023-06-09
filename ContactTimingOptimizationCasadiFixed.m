@@ -4,9 +4,6 @@ clear all; clc; close all
 
 import casadi.*
 
-% Whether to use the python solution.csv output
-usePython = false;
-
 %% Constant Parameters
 
 % Omega cost weight
@@ -28,7 +25,7 @@ tMax = 1.5;
 n_p = 2;
 
 % Predefined number of steps for the ith contact phase
-N = ones(n_p,1).*20;
+N = ones(n_p,1).*30;
 
 % Helper for checking what contact we are in
 Nch = cumsum(N);
@@ -135,6 +132,9 @@ Omega = {};
 DOmega = {};
 
 % Rotation matrix of the body frame (3x3)
+% Note: Rotation matrix is not actually a decision variable. if it was, 
+% the problem would be overparameterized! It is dependent on the history 
+% of Omega 
 R = {};
 
 % GRF on each foot (3x4)
@@ -143,35 +143,21 @@ F = {};
 for k = 1 : Nc
     p_body = {p_body{:}, SX.sym(['p_body_k' num2str(k)],3,1)};
     dp_body = {dp_body{:}, SX.sym(['dp_body_k' num2str(k)],3,1)};
-    p_feet = {p_feet{:}, SX.sym(['p_feet_k' num2str(k)],3,4)};
     Omega = {Omega{:}, SX.sym(['Omega_k' num2str(k)],3,1)}; 
-    DOmega = {DOmega{:}, SX.sym(['DOmega_k' num2str(k)],3,1)}; 
-    R = {R{:}, SX.sym(['R_k' num2str(k)],3,3)};
-    F = {F{:}, SX.sym(['F_k' num2str(k)],3,4)};
+    DOmega = {DOmega{:}, SX.sym(['DOmega_k' num2str(k)],3,1)};
+    if k < N(1)
+        p_feet = {p_feet{:}, SX.sym(['p_feet_k' num2str(k)],3,4)};
+        F = {F{:}, SX.sym(['F_k' num2str(k)],3,4)};
+    end
 end
+
+% Optimal contact timing for the ith contact phase (n_px1)
+T = SX.sym('T',n_p,1);
 
 % Function to get the matrix log transform (SO(3) -> so(3))
 index_arg = SX.sym('index_arg');
 R_arg = SX.sym('R_arg',3,3);
 q_arg = SX.sym('q_arg',4,1);
-% test_arg = SX.sym('test_arg',3,1);
-% log_map = Function.if_else('log_map', ...
-%     Function('f_true', {R_arg}, {zeros(3,3)}), ...
-%     Function('f_false', {R_arg}, ...
-%     {vex(R_arg-transpose(R_arg)).*(acos((trace(R_arg)-1)/2)/ ...
-%     (2*sin(acos((trace(R_arg)-1)/2))))}));
-% log_map = Function.if_else('log_map', ...
-%     Function('f_true', {R_arg}, ...
-%     {vex(R_arg-transpose(R_arg)).*((1/2) + ...
-%     (1/12)*((acos((trace(R_arg)-1)/2))^2) + ...
-%     (7/720)*((acos((trace(R_arg)-1)/2))^4))}), ...
-%     Function('f_false', {R_arg}, ...
-%     {vex(R_arg-transpose(R_arg)).*(acos((trace(R_arg)-1)/2)/ ...
-%     (2*(1/2)*sqrt((3-R_arg.trace())*(1+R_arg.trace()))))}));
-% log_map = Function('log_map', {R_arg}, ...
-%     {vex(R_arg-transpose(R_arg)).*((1/2) + ...
-%     (1/12)*((acos((trace(R_arg)-1)/2))^2) + ...
-%     (7/720)*((acos((trace(R_arg)-1)/2))^4))});
 
 f_000 = [sqrt(1+trace(R_arg))/2,; ...
         ((1/2)/(sqrt(1+trace(R_arg)))* ...
@@ -213,14 +199,11 @@ f_c2 = conditional(index_arg,f_master_cell2,0,false);
 quat_to_axis_angle = Function('quat_to_axis_angle', ...
     {index_arg,q_arg},{f_c2});
 
-% Optimal contact timing for the ith contact phase (n_px1)
-T = SX.sym('T',n_p,1);
-
 %% Initial States
 
 p_body0 = [0;0;0.35];
 dp_body0 = zeros(3,1);
-R0 = eul2rotm([deg2rad(0),deg2rad(0),deg2rad(0)], 'XYZ');
+R0 = eul2rotm([deg2rad(-0.2),deg2rad(0.1),deg2rad(5)], 'XYZ');
 tmp = kin.fk([deg2rad(-5);deg2rad(5);deg2rad(5)]);
 p_feet0 = [p_body0 + R0*legMask(tmp,1),p_body0 + R0*legMask(tmp,2), ...
     p_body0 + R0*legMask(tmp,3), p_body0 + R0*legMask(tmp,4)];
@@ -229,8 +212,8 @@ DOmega0 = zeros(3,1);
 
 %% Final States
 
-p_bodyf = [bodyHalfLength*2;0;0.35];
-Rf = eul2rotm([deg2rad(0),deg2rad(0),deg2rad(0)], 'XYZ');
+p_bodyf = [bodyHalfLength*2;0;0.25];
+Rf = eul2rotm([deg2rad(2),deg2rad(-6),deg2rad(0)], 'XYZ');
 tmp = kin.fk([deg2rad(-20);deg2rad(30);deg2rad(5)]);
 p_feetf = [p_bodyf + Rf*legMask(tmp,1),p_bodyf + Rf*legMask(tmp,2), ...
     p_bodyf + Rf*legMask(tmp,3), p_bodyf + Rf*legMask(tmp,4)];
@@ -258,14 +241,13 @@ g = {};
 lbg = {};
 ubg = {};
 
-global p_body_idx dp_body_idx p_feet_idx Omega_idx DOmega_idx R_idx ...
-F_idx T_idx currentIndex
+global p_body_idx dp_body_idx p_feet_idx Omega_idx DOmega_idx F_idx ...
+T_idx currentIndex
 p_body_idx = {};
 dp_body_idx = {};
 p_feet_idx = {};
 Omega_idx = {};
 DOmega_idx = {};
-R_idx = {};
 F_idx = {};
 T_idx = {};
 currentIndex = 1;
@@ -276,6 +258,8 @@ addGeneralConstraints(T.sum(), tMin, tMax);
 % All contact timings must be positive
 addDesignConstraintsAndInit(T, ones(n_p,1).*(tMin/(n_p+1)), ...
     ones(n_p,1).*(tMax), ones(n_p,1).*((tMax-tMin)/n_p), 'T');
+
+R_k = R0;
 
 for k = 1 : Nc
     %% Gather Decision Variables
@@ -289,9 +273,6 @@ for k = 1 : Nc
     % Time derivative of the COM of the body (3x1)
     dp_body_k = dp_body{1,k};
     
-    % Foot position in the world frame of each foot (3x4)
-    p_feet_k = p_feet{1,k};
-    
     % Angular velocity of SRB w.r.t body frame (3x1)
     Omega_k = Omega{1,k};
 
@@ -299,7 +280,11 @@ for k = 1 : Nc
     DOmega_k = DOmega{1,k};
     
     % Rotation matrix of the body frame (3x3)
-    R_k = R{1,k};
+    % Not a decision variable!
+    R_k = R_k*approximateExpA(skew(Omega_k/dt), 4);
+
+    % Foot position in the world frame of each foot (3x4)
+    p_feet_k = p_feet{1,k};
     
     % GRF on each foot (3x4)
     F_k = F{1,k};
@@ -324,35 +309,27 @@ for k = 1 : Nc
                     addDesignConstraintsAndInit(p_feet_k(:,leg), ...
                         p_feet0(:,leg), p_feet0(:,leg), ...
                         p_feet0(:,leg), 'p_feet');
-                else
-                    addDesignConstraintsAndInit(p_feet_k(:,leg), ...
-                        p_feet_bounds(:,1), p_feet_bounds(:,2), ...
-                        randInBounds(p_feet_bounds), 'p_feet');
                 end
             end
-    
-            % Add dummy rotation constraints
-            addDesignConstraintsAndInit(R_k.reshape(9,1), ...
-                ones(9,1).*(-1.05), ones(9,1).*(1.05), ...
-                reshape(SO3.rand().R(),9,1), 'R');
+   
         end
     end
 
     % Add friction cone, GRF, and foot position constraints to each leg
     grf = zeros(3,1);
     tau = zeros(3,1);
-    for leg = 1 : 4
-        tau = tau + cross(F_k(:,leg),(p_body_k-p_feet_k(:,leg)));
-        if i == 1
-            grf = grf + F_k(:,leg);
-            addGeneralConstraints(abs(F_k(1,leg)/F_k(3,leg)), 0, mu);
-            addGeneralConstraints(abs(F_k(2,leg)/F_k(3,leg)), 0, mu);
+        for leg = 1 : 4
+            if i == 1
+                tau = tau + cross(F_k(:,leg),(p_body_k-p_feet_k(:,leg)));
+                grf = grf + F_k(:,leg);
+                addGeneralConstraints(abs(F_k(1,leg)/F_k(3,leg)), 0, mu);
+                addGeneralConstraints(abs(F_k(2,leg)/F_k(3,leg)), 0, mu);
+                addGeneralConstraints(abs(R_k*(p_feet_k(:,leg) - ...
+                    p_body_k) - p_feet_bar(:,leg)), zeros(3,1), r);
+                addDesignConstraintsAndInit(F_k(:,leg), f_bounds(:,1), ...
+                    f_bounds(:,2), [0;0;mass/4], 'F');
+            end
         end
-        addGeneralConstraints(abs(R_k*(p_feet_k(:,leg) - p_body_k) ...
-            - p_feet_bar(:,leg)), zeros(3,1), r);
-        addDesignConstraintsAndInit(F_k(:,leg), f_bounds(:,1), ...
-            f_bounds(:,2), [0;0;mass/4], 'F');
-    end
 
     % Discrete dynamics
     if k < Nc
@@ -360,14 +337,12 @@ for k = 1 : Nc
         dp_body_k1 = dp_body{1,k+1};
         Omega_k1 = Omega{1,k+1};
         DOmega_k1 = DOmega{1,k+1};
-        R_k1 = R{1,k+1};
 
         p_body_next = p_body_k + dp_body_k.*dt;
         dp_body_next = dp_body_k + ((grf./mass) + g_accel).*dt;
         Omega_next = Omega_k + DOmega_k.*dt;
         DOmega_next = DOmega_k + invinertia*((transpose(R_k)*tau) - ...
             cross(Omega_k,(inertia*Omega_k))).*dt;
-        R_next = R_k*approximateExpA(skew(Omega_k.*dt),20);
 
         addGeneralConstraints(p_body_k1-p_body_next, zeros(3,1), ...
             zeros(3,1));
@@ -376,8 +351,6 @@ for k = 1 : Nc
         addGeneralConstraints(Omega_k1-Omega_next, zeros(3,1), zeros(3,1));
         addGeneralConstraints(DOmega_k1-DOmega_next, zeros(3,1), ...
             zeros(3,1));
-        addGeneralConstraints(reshape(R_k1-R_next,9,1), zeros(9,1), ...
-            zeros(9,1));
     end
 
     % Initial States
@@ -394,20 +367,14 @@ for k = 1 : Nc
             addDesignConstraintsAndInit(p_feet_k(:,leg), ...
                 p_feet0(:,leg), p_feet0(:,leg), p_feet0(:,leg), 'p_feet');
         end
-        addDesignConstraintsAndInit(R_k.reshape(9,1), ...
-            reshape(R0,9,1), reshape(R0,9,1), reshape(R0,9,1), 'R');
     end
     
     % Final States
     if k == Nc
         addDesignConstraintsAndInit(p_body_k, p_bodyf, p_bodyf, ...
             p_bodyf, 'p_body');
-        for leg = 1 : 4
-            addDesignConstraintsAndInit(p_feet_k(:,leg), ...
-                p_feetf(:,leg), p_feetf(:,leg), p_feetf(:,leg), 'p_feet');
-        end
-        addDesignConstraintsAndInit(R_k.reshape(9,1), reshape(Rf,9,1), ...
-            reshape(Rf,9,1), reshape(Rf,9,1), 'R');
+        addGeneralConstraints(R_k.reshape(9,1), reshape(Rf,9,1), ...
+            reshape(Rf,9,1));
     end
 
     %% Objective Function
@@ -425,11 +392,7 @@ for k = 1 : Nc
     q_k = matrix_to_quat(index_s, R_err_k);
     q_k = sign(q_k(1)).*q_k;
     e_R_k = quat_to_axis_angle(0, q_k);
-    % e_R_k = log_map(abs(3-R_err_k.trace())<=10e-8, R_err_k);
-    % e_R_k = log_map(acos((trace(R_err_k)-1)/2)==0, R_err_k);
-    % e_R_k = log_map(R_err_k);
-    % e_R_k = vex(abs(R_ref(:,:,k) - R_k));
-    % e_R_k = vex(abs(R_err_k - eye(3)));
+
     J = J + (eOmega.*transpose(Omega_k)*Omega_k) + ...
         (eF.*transpose(grf)*grf) + (eR.*transpose(e_R_k)*e_R_k);
 end
@@ -437,9 +400,8 @@ end
 %% Solve Problem
 
 % Create an NLP solver
-options = struct('ipopt', struct('max_iter', 100000, ...
+options = struct('expand', true, 'ipopt', struct('max_iter', 100000, ...
     'fixed_variable_treatment', 'make_constraint', ...
-    'hessian_approximation', 'limited-memory', ...
     'mumps_mem_percent', 10000, 'print_level', 5));
 problem = struct('f', J, 'x', vertcat(w{:}), 'g', vertcat(g{:}));
 solver = nlpsol('solver', 'ipopt', problem, options);
@@ -451,35 +413,12 @@ w_opt = full(sol.x);
 
 %% Unpack Solution
 
-if usePython
-    % Set up the Import Options and import the data
-    opts = delimitedTextImportOptions("NumVariables", 1);
-    
-    % Specify range and delimiter
-    opts.DataLines = [1, Inf];
-    opts.Delimiter = ",";
-    
-    % Specify column names and types
-    opts.VariableNames = "e02";
-    opts.VariableTypes = "double";
-    
-    % Specify file level properties
-    opts.ExtraColumnsRule = "ignore";
-    opts.EmptyLineRule = "read";
-
-    % Import the data
-    w_opt = table2array(readtable("C:\Users\quant\OneDrive\Documents\PlatformIO\Projects\BiQuAcrobatics\python\solution.csv", opts));
-
-    % Clear temporary variables
-    clear opts
-end
-
 p_body_opt = unpackIndices(w_opt, p_body_idx, 3, 1, false);
 dp_body_opt = unpackIndices(w_opt, dp_body_idx, 3, 1, false);
 p_feet_opt = unpackIndices(w_opt, p_feet_idx, 3, 4, true);
 Omega_opt = unpackIndices(w_opt, Omega_idx, 3, 1, false);
 DOmega_opt = unpackIndices(w_opt, DOmega_idx, 3, 1, false);
-R_opt = unpackIndices(w_opt, R_idx, 3, 3, false);
+R_opt = R;
 F_opt = unpackIndices(w_opt, F_idx, 3, 4, true);
 T_opt = unpackIndices(w_opt, T_idx, 2, 1, false);
 
