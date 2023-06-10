@@ -28,7 +28,7 @@ tMax = 1.5;
 n_p = 2;
 
 % Predefined number of steps for the ith contact phase
-N = ones(n_p,1).*20;
+N = ones(n_p,1).*30;
 
 % Helper for checking what contact we are in
 Nch = cumsum(N);
@@ -80,7 +80,7 @@ p_feet_bar = [legMask(pbar,1),legMask(pbar,2),legMask(pbar,3),...
               legMask(pbar,4)];
 
 % Sphere of radius r that the foot position is constrained to
-r = ones(3,1).*0.25;
+r = 0.25;
 
 % Mass of the SRB
 mass = 2.50000279;
@@ -218,7 +218,7 @@ T = SX.sym('T',n_p,1);
 
 %% Initial States
 
-p_body0 = [0;0;0.35];
+p_body0 = [0;0;0.3125];
 dp_body0 = zeros(3,1);
 R0 = eul2rotm([deg2rad(0),deg2rad(0),deg2rad(0)], 'XYZ');
 tmp = kin.fk([deg2rad(-5);deg2rad(5);deg2rad(5)]);
@@ -229,7 +229,7 @@ DOmega0 = zeros(3,1);
 
 %% Final States
 
-p_bodyf = [bodyHalfLength*2;0;0.35];
+p_bodyf = [bodyHalfLength*3;0;0.3125];
 Rf = eul2rotm([deg2rad(0),deg2rad(0),deg2rad(0)], 'XYZ');
 tmp = kin.fk([deg2rad(-20);deg2rad(30);deg2rad(5)]);
 p_feetf = [p_bodyf + Rf*legMask(tmp,1),p_bodyf + Rf*legMask(tmp,2), ...
@@ -348,8 +348,8 @@ for k = 1 : Nc
             addGeneralConstraints(abs(F_k(1,leg)/F_k(3,leg)), 0, mu);
             addGeneralConstraints(abs(F_k(2,leg)/F_k(3,leg)), 0, mu);
         end
-        addGeneralConstraints(abs(R_k*(p_feet_k(:,leg) - p_body_k) ...
-            - p_feet_bar(:,leg)), zeros(3,1), r);
+        addGeneralConstraints(norm(R_k*(p_feet_k(:,leg) - p_body_k) ...
+            - p_feet_bar(:,leg)), 0, r);
         addDesignConstraintsAndInit(F_k(:,leg), f_bounds(:,1), ...
             f_bounds(:,2), [0;0;mass/4], 'F');
     end
@@ -362,12 +362,13 @@ for k = 1 : Nc
         DOmega_k1 = DOmega{1,k+1};
         R_k1 = R{1,k+1};
 
-        p_body_next = p_body_k + dp_body_k.*dt;
-        dp_body_next = dp_body_k + ((grf./mass) + g_accel).*dt;
+        ddp_body = ((grf./mass) + g_accel);
+        p_body_next = p_body_k + dp_body_k.*dt + (1/2).*ddp_body.*(dt^2);
+        dp_body_next = dp_body_k + ddp_body.*dt;
         Omega_next = Omega_k + DOmega_k.*dt;
-        DOmega_next = DOmega_k + invinertia*((transpose(R_k)*tau) - ...
-            cross(Omega_k,(inertia*Omega_k))).*dt;
-        R_next = R_k*approximateExpA(skew(Omega_k.*dt),20);
+        DOmega_next = invinertia*((transpose(R_k)*tau) - ...
+            cross(Omega_k,(inertia*Omega_k)));
+        R_next = R_k*approximateExpA(skew(Omega_k.*dt),4);
 
         addGeneralConstraints(p_body_k1-p_body_next, zeros(3,1), ...
             zeros(3,1));
@@ -502,7 +503,7 @@ while true
         i = getCurrentPhase(k, Nch);
         qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
         qcj = [qc; qj];
-        plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r(1), ...
+        plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
             R_opt(:,:,k),F_opt(:,:,k),plts);
         if i == 1
             waitfor(r1);
