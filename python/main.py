@@ -218,8 +218,13 @@ Omega0 = np.zeros((3, 1))
 DOmega0 = np.zeros((3, 1))
 
 # Final States
-p_bodyf = [0.194*3, 0, 0.3125]
+p_bodyf = [0.4, 0, 0.3125]
 Rf = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
+tmp = [0.0179, 0.2386, -0.2385]
+p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp, 1)),
+                    p_bodyf + np.matmul(Rf, leg_mask(tmp, 2)),
+                    p_bodyf + np.matmul(Rf, leg_mask(tmp, 3)),
+                    p_bodyf + np.matmul(Rf, leg_mask(tmp, 4))]).transpose()
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
@@ -227,7 +232,7 @@ pbar = [0.2, 0.2, -0.2]
 p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), leg_mask(pbar, 4)]).transpose()
 
 # Sphere of radius r that the foot position is constrained to
-r = 0.2
+r = 0.25
 
 # Friction coefficient
 mu = 0.7
@@ -445,6 +450,9 @@ for k in range(cons.num_steps):
         constraints.add_design_constraints(p_body_k, p_bodyf, p_bodyf, p_bodyf, 'p_body')
         constraints.add_design_constraints(reshape(R_k, (9, 1)), np.reshape(Rf, (9, 1)),
                                            np.reshape(Rf, (9, 1)), np.reshape(Rf, (9, 1)), 'R')
+        for leg in range(4):
+            constraints.add_general_constraints(norm_2(mtimes(Rf, (p_feetf[:, leg] - p_body_k)) - p_feet_bar[:, leg]),
+                                                [0], [r])
 
     # Objective Function
 
@@ -478,17 +486,20 @@ solver = nlpsol("solver", "ipopt", nlp, opts)
 
 # Solve the NLP
 sol = solver(x0=x0, lbg=constraints.lbg, ubg=constraints.ubg, lbx=lbx, ubx=ubx)
-solx = sol["x"]
-T_opt = constraints.unpack_indices(solx, "T")
-p_body_opt = constraints.unpack_indices(solx, "p_body")
-dp_body_opt = constraints.unpack_indices(solx, "dp_body")
-Omega_opt = constraints.unpack_indices(solx, "Omega")
-DOmega_opt = constraints.unpack_indices(solx, "DOmega")
-R_opt = constraints.unpack_indices(solx, "R")
-F_0_opt = constraints.unpack_indices(solx, "F_0")
-F_1_opt = constraints.unpack_indices(solx, "F_1")
-F_2_opt = constraints.unpack_indices(solx, "F_2")
-F_3_opt = constraints.unpack_indices(solx, "F_3")
+sol_f = sol["f"]
+sol_x = sol["x"]
+sol_lam_x = sol["lam_x"]
+sol_lam_g = sol["lam_g"]
+T_opt = constraints.unpack_indices(sol_x, "T")
+p_body_opt = constraints.unpack_indices(sol_x, "p_body")
+dp_body_opt = constraints.unpack_indices(sol_x, "dp_body")
+Omega_opt = constraints.unpack_indices(sol_x, "Omega")
+DOmega_opt = constraints.unpack_indices(sol_x, "DOmega")
+R_opt = constraints.unpack_indices(sol_x, "R")
+F_0_opt = constraints.unpack_indices(sol_x, "F_0")
+F_1_opt = constraints.unpack_indices(sol_x, "F_1")
+F_2_opt = constraints.unpack_indices(sol_x, "F_2")
+F_3_opt = constraints.unpack_indices(sol_x, "F_3")
 
 T_opt = T_opt.reshape(T_opt.shape[0], -1)
 p_body_opt = p_body_opt.reshape(p_body_opt.shape[0], -1)
@@ -503,10 +514,18 @@ F_3_opt = F_3_opt.reshape(F_3_opt.shape[0], -1)
 
 # Print solution
 print("-----")
-print("primal solution = ")
-print(solx)
+print("objective at solution =", sol_f)
 print("-----")
-np.savetxt('opt/solution.csv', solx, delimiter=',')
+print("primal solution =", sol_x)
+print("-----")
+print("dual solution (x) =", sol_lam_x)
+print("-----")
+print("dual solution (g) =", sol_lam_g)
+print("-----")
+np.savetxt('opt/sol_f.csv', sol_f, delimiter=',')
+np.savetxt('opt/sol_x', sol_x, delimiter=',')
+np.savetxt('opt/sol_lam_x.csv', sol_lam_x, delimiter=',')
+np.savetxt('opt/sol_lam_g.csv', sol_lam_g, delimiter=',')
 
 np.savetxt('opt/T_opt.csv', np.transpose(np.array(T_opt)), delimiter=',')
 np.savetxt('opt/p_body_opt.csv', p_body_opt, delimiter=',')
@@ -522,4 +541,5 @@ np.savetxt('opt/F_3_opt.csv', F_3_opt, delimiter=',')
 np.savetxt('metadata/step_list.csv', np.array(step_list), delimiter=',')
 np.savetxt('metadata/contact_list.csv', np.array(contact_list), delimiter=',')
 np.savetxt('metadata/p_feet0.csv', p_feet0, delimiter=',')
+np.savetxt('metadata/p_feetf.csv', p_feetf, delimiter=',')
 np.savetxt('metadata/p_feet_bar.csv', np.array(p_feet_bar), delimiter=',')

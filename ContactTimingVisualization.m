@@ -1,4 +1,30 @@
-clear all; clc; close all
+clc; close all
+
+% Kinematics
+syms q [3, 1]
+bodyHalfLength = 0.194;
+bodyHalfWidth = 0.0875;
+bodyHalfHeight = 0.025;
+abadLinkLength = 0.01295;
+hipLinkLength = 0.160;
+kneeLinkY_offset = 0.04745;
+kneeLinkLength = 0.1675;
+bounds = [deg2rad(-90), deg2rad(90);
+          deg2rad(-90), deg2rad(90);
+          deg2rad(-90), deg2rad(90)];
+PM = utils.tdh(pi/2, 0, bodyHalfWidth, -pi/2) * ...
+     utils.tdh(0, -bodyHalfLength, 0, 0);
+omegaList = [[0;0;1], [1;0;0], [1;0;0]];
+pList = [[0;0;0], [abadLinkLength; 0; 0], ...
+         [kneeLinkY_offset; hipLinkLength; 0]];
+R_home = [0,1,0;
+          0,0,-1;
+          -1,0,0];
+t_home = [abadLinkLength + kneeLinkY_offset; ...
+          hipLinkLength + kneeLinkLength;0];
+M = [R_home, t_home;
+     0, 0, 0, 1];
+kin = kinematics.KinematicsPOE(PM,M,omegaList,pList,q,bounds,6,3);
 
 %% Unpack Solution
 
@@ -7,8 +33,9 @@ clear all; clc; close all
 step_list = table2array(readtable(pwd + "\python\metadata\step_list"));
 contact_list = table2array(readtable(pwd + "\python\metadata\contact_list"));
 p_feet0 = table2array(readtable(pwd + "\python\metadata\p_feet0"));
+p_feetf = table2array(readtable(pwd + "\python\metadata\p_feetf"));
 p_feet_bar = table2array(readtable(pwd + "\python\metadata\p_feet_bar"));
-r = 0.2;
+r = 0.25;
 
 n_p = size(step_list, 1);
 Nch = cumsum(step_list);
@@ -19,6 +46,7 @@ dp_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\opt\dp_body
 Omega_opt = reshape(transpose(table2array(readtable(pwd + "\python\opt\Omega_opt"))), 3, 1, Nc);
 DOmega_opt = reshape(transpose(table2array(readtable(pwd + "\python\opt\DOmega_opt"))), 3, 1, Nc);
 R_opt = reshape(transpose(table2array(readtable(pwd + "\python\opt\R_opt"))), 3, 3, Nc);
+p_feet_opt = zeros(3, 4, Nc);
 
 f_idx = [0;0;0;0];
 for i = 1 : n_p
@@ -31,40 +59,78 @@ F_3_opt = reshape(table2array(readtable(pwd + "\python\opt\F_3_opt")), 3, 1, Nch
 T_opt = table2array(readtable(pwd + "\python\opt\T_opt"));
 
 F_opt = zeros(3, 4, Nc);
+for k = 1 : Nc
+    i = getCurrentPhase(k, Nch);
+    R_opt(:,:,k) = transpose(R_opt(:,:,k));
+    F_k = zeros(3, 4);
+    if k < Nch(f_idx(1))
+        F_k(:,1) = F_0_opt(:,:,k);
+        p_feet_opt(:,1,k) = p_feet0(:,1);
+    else
+        p_feet_opt(:,1,k) = p_feetf(:,1);
+    end
+    if k < Nch(f_idx(2))
+        F_k(:,2) = F_1_opt(:,:,k);
+        p_feet_opt(:,2,k) = p_feet0(:,1);
+    else
+        p_feet_opt(:,2,k) = p_feetf(:,2);
+    end
+    if k < Nch(f_idx(3))
+        F_k(:,3) = F_2_opt(:,:,k);
+        p_feet_opt(:,3,k) = p_feet0(:,3);
+    else
+        p_feet_opt(:,3,k) = p_feetf(:,3);
+    end
+    if k < Nch(f_idx(4))
+        F_k(:,4) = F_3_opt(:,:,k);
+        p_feet_opt(:,4,k) = p_feet0(:,4);
+    else
+        p_feet_opt(:,4,k) = p_feetf(:,4);
+    end
+    F_opt(:,:,k) = F_k;
+end
 
 %% Visualization
 close all;
 robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
-qc = [transpose(rotm2eul(R_opt(:,:,1), 'XYZ')); p_body_opt(:,:,1)]; % Pose
-qj = [0;0;0;       % Leg 1
-      0;0;0;       % Leg 2
-      0;0;0;       % Leg 3
-      0;0;0];      % Leg 4
+qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
+
+qj = getJointAngles(kin, p_body_opt(:,:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
 qcj = [qc;qj];
 initVisualizer(robot, qcj);
 slowDown = 2;
-r1 = rateControl((step_list(1)/T_opt(1))/slowDown);
-r2 = rateControl((step_list(2)/T_opt(2))/slowDown);
-% r3 = rateControl(100);
-% if length(step_list) > 2
-%     r3 = rateControl((step_list(3)/T_opt(2))/slowDown);
-% end
+rates = {};
+for i = 1 : n_p
+    rates = {rates{:}, rateControl((step_list(i)/T_opt(i))/slowDown)};
+end
+
 plts = [];
 while true
     for k = 1 : Nc
         i = getCurrentPhase(k, Nch);
-        qc = [transpose(rotm2eul(R_opt(:,:,k), 'XYZ')); p_body_opt(:,:,k)];
-        qcj = [qc; qj];
-        plts = drawQuadruped(robot,qcj,p_feet0,p_feet_bar,r, ...
-            R_opt(:,:,k),F_opt(:,:,k),plts, p_body_opt(:, :, 1));
+        qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
         if i == 1
-            waitfor(r1);
-        elseif i == 2
-            waitfor(r2);
-%         else
-%             waitfor(r3);
+            qj = getJointAngles(kin, p_body_opt(:,:,k), R_opt(:,:,k), p_feet_opt(:,:,k), qj);
         end
+        qcj = [qc; qj];
+        plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
+            R_opt(:,:,k),F_opt(:,:,k),plts, p_body_opt(:, :, 1));
+        waitfor(rates{i});
     end
+end
+
+function qj = getJointAngles(kin, p_body_k, R_k, p_feet_k, y0)
+    T_wb = [transpose(R_k),-p_body_k; 
+            0, 0, 0, 1];
+    T_bf1 = T_wb*[p_feet_k(:,1);1];
+    T_bf2 = T_wb*[p_feet_k(:,2);1];
+    T_bf3 = T_wb*[p_feet_k(:,3);1];
+    T_bf4 = T_wb*[p_feet_k(:,4);1];
+
+    qj = [kin.ik(legMask(T_bf1(1:3,1),1), y0(1:3));
+          kin.ik(legMask(T_bf2(1:3,1),2), y0(4:6));
+          kin.ik(legMask(T_bf3(1:3,1),3), y0(7:9));
+          kin.ik(legMask(T_bf4(1:3,1),4), y0(10:12))];
 end
 
 function initVisualizer(robot, qj)
@@ -93,9 +159,9 @@ end
 
 function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     old_plts, p0)
-    p_body = [-q(4);-q(5);q(6)];
+    p_body = [q(4);q(5);q(6)];
 
-    q_t = [q(1)+pi;q(2:3);p_body;q(7:end)];
+    q_t = [q(1);q(2:3);p_body;q(7:end)];
     show(robot, q_t, "PreservePlot", false, "FastUpdate", true, ...
         "Frames","on");
     plts = [];
@@ -113,11 +179,13 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
             otherwise
                 disp("ERROR")
         end
-        plts = [plts; quiver3(-p_feet(1,leg),-p_feet(2,leg), ...
-            p_feet(3,leg), -F(1,leg),-F(2,leg),F(3,leg), ...
-            "MarkerEdgeColor",color)];
+        plts = [plts; quiver3(p_feet(1,leg),p_feet(2,leg), ...
+            p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
+            "Color",color,"LineWidth",2,"AutoScaleFactor",0.1, ...
+            "ShowArrowHead","on")];
         tmp = p_feet_bar(:,leg);
-        tr = p0 + [-tmp(1);-tmp(2); tmp(3)];
+        tr = ([p_body(1);p_body(2);p_body(3)]) + R*[tmp(1);tmp(2);
+            tmp(3)];
         [x,y,z] = sphere;
         x = x*r + tr(1);
         y = y*r + tr(2);
@@ -137,5 +205,17 @@ function i = getCurrentPhase(k, Nch)
     i = 1;
     for j = 1 : length(Nch)-1
         i = i + (k > Nch(j));
+    end
+end
+
+function newPos = legMask(pos, leg)
+    if leg == 1
+        newPos = pos;
+    elseif leg == 2
+        newPos = [pos(1);-pos(2);pos(3)];
+    elseif leg == 3
+        newPos = [-pos(1);pos(2);pos(3)];
+    else
+        newPos = [-pos(1);-pos(2);pos(3)];
     end
 end

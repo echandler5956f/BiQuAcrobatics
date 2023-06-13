@@ -232,6 +232,7 @@ DOmega0 = zeros(3,1);
 p_bodyf = [bodyHalfLength*3;0;0.3125];
 Rf = eul2rotm([deg2rad(0),deg2rad(0),deg2rad(0)], 'XYZ');
 tmp = kin.fk([deg2rad(-20);deg2rad(30);deg2rad(5)]);
+disp(tmp)
 p_feetf = [p_bodyf + Rf*legMask(tmp,1),p_bodyf + Rf*legMask(tmp,2), ...
     p_bodyf + Rf*legMask(tmp,3), p_bodyf + Rf*legMask(tmp,4)];
 
@@ -487,7 +488,7 @@ T_opt = unpackIndices(w_opt, T_idx, 2, 1, false);
 %% Visualization
 close all;
 robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
-qc = [transpose(rotm2eul(R_opt(:,:,1), 'XYZ')); p_body_opt(:,:,1)]; % Pose
+qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
 qj = [0;0;0;       % Leg 1
       0;0;0;       % Leg 2
       0;0;0;       % Leg 3
