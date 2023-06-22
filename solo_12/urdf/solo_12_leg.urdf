@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="solo_12_leg">
+
+  <link name="base_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/solo12/solo_12_base.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HAA JOINT -->
+  <joint name="FL_HAA" type="revolute">
+    <parent link="base_link"/>
+    <child link="FL_SHOULDER"/>
+    <!-- joints rotates around the x-axis -->
+    <axis xyz="1 0 0"/>
+    <origin rpy="0 0 0" xyz="0.2141 0.0875 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- SHOULDER LINK -->
+  <link name="FL_SHOULDER">
+    <visual>
+      <origin rpy="0 0 0" xyz="0.01950 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/solo12/solo12_hip_fe_fl.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- HFE JOINT -->
+  <joint name="FL_HFE" type="revolute">
+    <parent link="FL_SHOULDER"/>
+    <child link="FL_UPPER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="-0.0195 0.014 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- UPPER LEG LINK -->
+  <link name="FL_UPPER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_upper_leg_left_side.stl"/>
+      </geometry>
+      <material name="yellow">
+        <color rgba="1.0 0.8 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- KFE JOINT-->
+  <joint name="FL_KFE" type="revolute">
+    <parent link="FL_UPPER_LEG"/>
+    <child link="FL_LOWER_LEG"/>
+    <!-- joints rotates around the y-axis -->
+    <axis xyz="0 1 0"/>
+    <origin rpy="0 0 0" xyz="0 0.03745 -0.16"/>
+    <limit lower="0" upper="0" effort="0" velocity="0" />
+  </joint>
+
+  <!-- LOWER LEG LINK -->
+  <link name="FL_LOWER_LEG">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://solo_12/meshes/without_foot/solo_lower_leg_v2_left_side.stl"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0 0 0 1.0"/>
+      </material>
+    </visual>
+  </link>
+  
+</robot>
+

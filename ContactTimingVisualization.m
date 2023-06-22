@@ -1,6 +1,9 @@
+%% Initialize
+
 clc; close all
 
 % Kinematics
+
 syms q [3, 1]
 bodyHalfLength = 0.194;
 bodyHalfWidth = 0.0875;
@@ -25,6 +28,15 @@ t_home = [abadLinkLength + kneeLinkY_offset; ...
 M = [R_home, t_home;
      0, 0, 0, 1];
 kin = kinematics.KinematicsPOE(PM,M,omegaList,pList,q,bounds,6,3);
+
+%  Verify kinematics
+
+% q1 = [deg2rad(5);deg2rad(-45);deg2rad(45)];
+% x1 = kin.fk([-q1(1);q1(2);q1(3)]);
+% disp(x1);
+% robot = importrobot("solo_12\urdf\solo_12_leg.urdf","DataFormat","column");
+% initVisualizer(robot, q1);
+% plot3(x1(1),x1(2),x1(3),'or');
 
 %% Unpack Solution
 
@@ -71,7 +83,7 @@ for k = 1 : Nc
     end
     if k < Nch(f_idx(2))
         F_k(:,2) = F_1_opt(:,:,k);
-        p_feet_opt(:,2,k) = p_feet0(:,1);
+        p_feet_opt(:,2,k) = p_feet0(:,2);
     else
         p_feet_opt(:,2,k) = p_feetf(:,2);
     end
@@ -98,7 +110,7 @@ qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
 qj = getJointAngles(kin, p_body_opt(:,:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
 qcj = [qc;qj];
 initVisualizer(robot, qcj);
-slowDown = 2;
+slowDown = 5;
 rates = {};
 for i = 1 : n_p
     rates = {rates{:}, rateControl((step_list(i)/T_opt(i))/slowDown)};
@@ -109,12 +121,10 @@ while true
     for k = 1 : Nc
         i = getCurrentPhase(k, Nch);
         qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
-        if i == 1
-            qj = getJointAngles(kin, p_body_opt(:,:,k), R_opt(:,:,k), p_feet_opt(:,:,k), qj);
-        end
+        qj = getJointAngles(kin, p_body_opt(:,:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
         qcj = [qc; qj];
         plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
-            R_opt(:,:,k),F_opt(:,:,k),plts, p_body_opt(:, :, 1));
+            R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,:,1),plts);
         waitfor(rates{i});
     end
 end
@@ -158,11 +168,13 @@ function initVisualizer(robot, qj)
 end
 
 function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
-    old_plts, p0)
-    p_body = [q(4);q(5);q(6)];
-
-    q_t = [q(1);q(2:3);p_body;q(7:end)];
-    show(robot, q_t, "PreservePlot", false, "FastUpdate", true, ...
+    p_body0, old_plts)
+    q = [q(1:6);
+        -q(7);q(8:9);
+        q(10:12);
+        -q(13:15);
+        q(16);-q(17:18)];
+    show(robot, q, "PreservePlot", false, "FastUpdate", true, ...
         "Frames","on");
     plts = [];
     for leg = 1 : 4
@@ -181,11 +193,10 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
         end
         plts = [plts; quiver3(p_feet(1,leg),p_feet(2,leg), ...
             p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
-            "Color",color,"LineWidth",2,"AutoScaleFactor",0.1, ...
+            "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
             "ShowArrowHead","on")];
         tmp = p_feet_bar(:,leg);
-        tr = ([p_body(1);p_body(2);p_body(3)]) + R*[tmp(1);tmp(2);
-            tmp(3)];
+        tr = tmp;
         [x,y,z] = sphere;
         x = x*r + tr(1);
         y = y*r + tr(2);

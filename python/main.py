@@ -209,26 +209,26 @@ cons = Contacts(step_list, contact_list)
 p_body0 = [0, 0, 0.3125]
 dp_body0 = np.zeros((3, 1))
 R0 = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
-tmp = [0.151, 0.1759, -0.3178]
-p_feet0 = np.array([p_body0 + np.matmul(R0, leg_mask(tmp, 1)),
-                    p_body0 + np.matmul(R0, leg_mask(tmp, 2)),
-                    p_body0 + np.matmul(R0, leg_mask(tmp, 3)),
-                    p_body0 + np.matmul(R0, leg_mask(tmp, 4))]).transpose()
+tmp1 = [0.151, 0.1759, -0.3125]
+p_feet0 = np.array([p_body0 + np.matmul(R0, leg_mask(tmp1, 1)),
+                    p_body0 + np.matmul(R0, leg_mask(tmp1, 2)),
+                    p_body0 + np.matmul(R0, leg_mask(tmp1, 3)),
+                    p_body0 + np.matmul(R0, leg_mask(tmp1, 4))]).transpose()
 Omega0 = np.zeros((3, 1))
 DOmega0 = np.zeros((3, 1))
 
 # Final States
-p_bodyf = [0.4, 0, 0.3125]
+p_bodyf = [0.4, 0, 0.275]
 Rf = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
-tmp = [0.0179, 0.2386, -0.2385]
-p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp, 1)),
-                    p_bodyf + np.matmul(Rf, leg_mask(tmp, 2)),
-                    p_bodyf + np.matmul(Rf, leg_mask(tmp, 3)),
-                    p_bodyf + np.matmul(Rf, leg_mask(tmp, 4))]).transpose()
+tmp2 = [0.225, 0.175, -0.275]
+p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
+                    p_bodyf + np.matmul(Rf, leg_mask(tmp2, 2)),
+                    p_bodyf + np.matmul(Rf, leg_mask(tmp2, 3)),
+                    p_bodyf + np.matmul(Rf, leg_mask(tmp2, 4))]).transpose()
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
-pbar = [0.2, 0.2, -0.2]
+pbar = [0.2, 0.2, -0.15]
 p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), leg_mask(pbar, 4)]).transpose()
 
 # Sphere of radius r that the foot position is constrained to
@@ -238,9 +238,9 @@ r = 0.25
 mu = 0.7
 
 # GRF limits
-f_bounds = np.array([[-75, 75],
-                     [-75, 75],
-                     [-100, 100]])
+f_bounds = np.array([[-3, 3],
+                     [-3, 3],
+                     [-0.01, 20]])
 
 # Acceleration due to gravity
 g_accel = np.array([[0], [0], [-9.81]])
@@ -254,7 +254,7 @@ p_body_bounds = np.array([[-1, 1],
 # Velocity bounds to make the problem more solvable
 dp_body_bounds = np.array([[-3, 3],
                            [-3, 3],
-                           [-20, 20]])
+                           [-5, 5]])
 
 # Angular velocity bounds to make the problem more solvable
 Omega_bounds = np.array([[-1, 1],
@@ -270,9 +270,9 @@ DOmega_bounds = np.array([[-4, 4],
 mass = 2.50000279
 
 # Inertia of SRB
-inertia = np.array([[3.09249e-2, -9.00101e-7, 1.865287e-5],
-                    [-8.00101e-7, 5.106100e-2, 1.245813e-4],
-                    [1.865287e-5, 1.245813e-4, 6.939757e-2]])
+inertia = np.array([[3.09249e-2, 0, 0],
+                    [0, 5.106100e-2, 0],
+                    [0, 0, 6.939757e-2]])
 inv_inertia = np.linalg.inv(inertia)
 
 # Decision Variables
@@ -373,7 +373,7 @@ for k in range(cons.num_steps):
             # Add body bounding box constraints
             constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1], p_body0, 'p_body')
             constraints.add_design_constraints(reshape(R_k, (9, 1)), np.ones((9, 1)) * (-1.05), np.ones((9, 1)) * 1.05,
-                                               reshape(rp.random().as_matrix(), (9, 1)), 'R')
+                                               reshape(R_ref_k, (9, 1)), 'R')
 
     # Add friction cone, GRF, and foot position constraints to each leg
     grf = np.zeros((3, 1))
@@ -462,7 +462,7 @@ for k in range(cons.num_steps):
     log_callback_fun_helper = [log_callback_fun_helper, log_callback_k]
     log_callback_fun = [log_callback_fun, fun_k]
 
-    J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + (eF * mtimes(transpose(grf), grf)) + (eR * fun_k(R_k))
+    # J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + (eF * mtimes(transpose(grf), grf))# + (eR * fun_k(R_k))
 
 x = constraints.w
 lbx = constraints.lbw
@@ -475,7 +475,7 @@ nlp = {'x': x, 'f': J, 'g': constraints.g}
 # Solver options
 opts = {}
 # opts["verbose"] = True
-opts["ipopt"] = {"max_iter": 1000,
+opts["ipopt"] = {"max_iter": 3000,
                  "fixed_variable_treatment": "make_constraint",
                  "hessian_approximation": "limited-memory",
                  "mumps_mem_percent": 10000,
