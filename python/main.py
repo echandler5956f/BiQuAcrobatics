@@ -70,10 +70,10 @@ class LogMap(Callback):
         q = sign(q) * q
         q_r, q_x, q_y, q_z = vertsplit(q)
         q_v = vertcat(q_x, q_y, q_z)
-        # if norm_2(q_v) < 1:
-        return ((2 / q_r) - (2 / 3) * (power(norm_2(q_v), 2) / power(q_r, 3))) * q_v
-        # else:
-        #     return 4 * atan(norm_2(q_v)/(q_r + sqrt(power(q_r, 2) + power(norm_2(q_v), 2)))) * (q_v / norm_2(q_v))
+        if norm_2(q_v) < 1:
+            return ((2 / q_r) - (2 / 3) * (power(norm_2(q_v), 2) / power(q_r, 3))) * q_v
+        else:
+            return 4 * atan(norm_2(q_v)/(q_r + sqrt(power(q_r, 2) + power(norm_2(q_v), 2)))) * (q_v / norm_2(q_v))
 
 
 class DesignField:
