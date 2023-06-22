@@ -197,10 +197,10 @@ tMin = 0.5
 tMax = 1.5
 
 # Steps per contact phase
-step_list = [30, 30]
+step_list = [30, 30, 30]
 
 # Contact pattern
-contact_list = [[1, 1, 1, 1],  [0, 0, 0, 0]]
+contact_list = [[1, 1, 1, 1],  [0, 0, 1, 1], [0, 0, 0, 0]]
 
 # Specify the contact metadata
 cons = Contacts(step_list, contact_list)
@@ -218,8 +218,8 @@ Omega0 = np.zeros((3, 1))
 DOmega0 = np.zeros((3, 1))
 
 # Final States
-p_bodyf = [0.4, 0.1, 0.275]
-Rf = rp.from_euler('xyz', [0, 0, 15], True).as_matrix()
+p_bodyf = [0.4, 0.3, 0.275]
+Rf = rp.from_euler('xyz', [0, 0, 45], True).as_matrix()
 tmp2 = [0.225, 0.175, -0.275]
 p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
                     p_bodyf + np.matmul(Rf, leg_mask(tmp2, 2)),
@@ -240,7 +240,7 @@ mu = 0.7
 # GRF limits
 f_bounds = np.array([[-12.5, 12.5],
                      [-12.5, 12.5],
-                     [-0.01, 30]])
+                     [-0.01, 35]])
 
 # Acceleration due to gravity
 g_accel = np.array([[0], [0], [-9.81]])
@@ -387,7 +387,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_0_k[1] / F_0_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 0] - p_body_k)) - p_feet_bar[:, 0]),
                                             [0], [r])
-        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_0')
+        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], np.array([0,0,mass/4]), 'F_0')
     if cons.contact_list[i][1]:
         F_1_k = F_1[3 * k: 3 * (k + 1)]
         grf = grf + F_1_k
@@ -396,7 +396,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_1_k[1] / F_1_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 1] - p_body_k)) - p_feet_bar[:, 1]),
                                             [0], [r])
-        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_1')
+        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], np.array([0,0,mass/4]), 'F_1')
     if cons.contact_list[i][2]:
         F_2_k = F_2[3 * k: 3 * (k + 1)]
         grf = grf + F_2_k
@@ -405,7 +405,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_2_k[1] / F_2_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 2] - p_body_k)) - p_feet_bar[:, 2]),
                                             [0], [r])
-        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_2')
+        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], np.array([0,0,mass/4]), 'F_2')
     if cons.contact_list[i][3]:
         F_3_k = F_3[3 * k: 3 * (k + 1)]
         grf = grf + F_3_k
@@ -414,7 +414,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_3_k[1] / F_3_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 3] - p_body_k)) - p_feet_bar[:, 3]),
                                             [0], [r])
-        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_3')
+        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], np.array([0,0,mass/4]), 'F_3')
 
     # Discrete dynamics
     if k < cons.num_steps - 1:
@@ -462,7 +462,7 @@ for k in range(cons.num_steps):
     log_callback_fun_helper = [log_callback_fun_helper, log_callback_k]
     log_callback_fun = [log_callback_fun, fun_k]
 
-    # J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + (eF * mtimes(transpose(grf), grf))# + (eR * fun_k(R_k))
+    J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + (eF * mtimes(transpose(grf), grf)) + (eR * fun_k(R_k))
 
 x = constraints.w
 lbx = constraints.lbw
@@ -475,7 +475,7 @@ nlp = {'x': x, 'f': J, 'g': constraints.g}
 # Solver options
 opts = {}
 # opts["verbose"] = True
-opts["ipopt"] = {"max_iter": 1000,
+opts["ipopt"] = {"max_iter": 100,
                  "fixed_variable_treatment": "make_constraint",
                  "hessian_approximation": "limited-memory",
                  "mumps_mem_percent": 10000,
