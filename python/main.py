@@ -200,7 +200,7 @@ tMax = 1.5
 step_list = [30, 30]
 
 # Contact pattern
-contact_list = [[1, 1, 1, 1], [0, 0, 0, 0]]
+contact_list = [[1, 1, 1, 1],  [0, 0, 0, 0]]
 
 # Specify the contact metadata
 cons = Contacts(step_list, contact_list)
@@ -218,8 +218,8 @@ Omega0 = np.zeros((3, 1))
 DOmega0 = np.zeros((3, 1))
 
 # Final States
-p_bodyf = [0.4, 0, 0.275]
-Rf = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
+p_bodyf = [0.4, 0.1, 0.275]
+Rf = rp.from_euler('xyz', [0, 0, 15], True).as_matrix()
 tmp2 = [0.225, 0.175, -0.275]
 p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
                     p_bodyf + np.matmul(Rf, leg_mask(tmp2, 2)),
@@ -228,19 +228,19 @@ p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
-pbar = [0.2, 0.2, -0.15]
+pbar = [0.2, 0.2, -0.16]
 p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), leg_mask(pbar, 4)]).transpose()
 
 # Sphere of radius r that the foot position is constrained to
-r = 0.25
+r = 0.2625
 
 # Friction coefficient
 mu = 0.7
 
 # GRF limits
-f_bounds = np.array([[-3, 3],
-                     [-3, 3],
-                     [-0.01, 20]])
+f_bounds = np.array([[-12.5, 12.5],
+                     [-12.5, 12.5],
+                     [-0.01, 30]])
 
 # Acceleration due to gravity
 g_accel = np.array([[0], [0], [-9.81]])
@@ -252,27 +252,27 @@ p_body_bounds = np.array([[-1, 1],
                           [-0.01, 1]])
 
 # Velocity bounds to make the problem more solvable
-dp_body_bounds = np.array([[-3, 3],
-                           [-3, 3],
-                           [-5, 5]])
+dp_body_bounds = np.array([[-2.5, 2.5],
+                           [-2.5, 2.5],
+                           [-2.5, 2.5]])
 
 # Angular velocity bounds to make the problem more solvable
-Omega_bounds = np.array([[-1, 1],
-                         [-1, 1],
-                         [-1, 1]])
+Omega_bounds = np.array([[-pi, pi],
+                         [-pi, pi],
+                         [-pi, pi]])
 
 # Time derivative angular velocity bounds to make the problem more solvable
-DOmega_bounds = np.array([[-4, 4],
-                          [-4, 4],
-                          [-4, 4]])
+DOmega_bounds = np.array([[-8.75, 8.75],
+                          [-8.75, 8.75],
+                          [-8.75, 8.75]])
 
 # Mass of the SRB
 mass = 2.50000279
 
 # Inertia of SRB
-inertia = np.array([[3.09249e-2, 0, 0],
-                    [0, 5.106100e-2, 0],
-                    [0, 0, 6.939757e-2]])
+inertia = np.array([[3.09249e-2, -9.00101e-7, 1.865287e-5],
+                    [-8.00101e-7, 5.106100e-2, 1.245813e-4],
+                    [1.865287e-5, 1.245813e-4, 6.939757e-2]])
 inv_inertia = np.linalg.inv(inertia)
 
 # Decision Variables
@@ -387,7 +387,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_0_k[1] / F_0_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 0] - p_body_k)) - p_feet_bar[:, 0]),
                                             [0], [r])
-        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, mass / 4], 'F_0')
+        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_0')
     if cons.contact_list[i][1]:
         F_1_k = F_1[3 * k: 3 * (k + 1)]
         grf = grf + F_1_k
@@ -396,7 +396,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_1_k[1] / F_1_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 1] - p_body_k)) - p_feet_bar[:, 1]),
                                             [0], [r])
-        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, mass / 4], 'F_1')
+        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_1')
     if cons.contact_list[i][2]:
         F_2_k = F_2[3 * k: 3 * (k + 1)]
         grf = grf + F_2_k
@@ -405,7 +405,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_2_k[1] / F_2_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 2] - p_body_k)) - p_feet_bar[:, 2]),
                                             [0], [r])
-        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, mass / 4], 'F_2')
+        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_2')
     if cons.contact_list[i][3]:
         F_3_k = F_3[3 * k: 3 * (k + 1)]
         grf = grf + F_3_k
@@ -414,7 +414,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_3_k[1] / F_3_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 3] - p_body_k)) - p_feet_bar[:, 3]),
                                             [0], [r])
-        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, mass / 4], 'F_3')
+        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_3')
 
     # Discrete dynamics
     if k < cons.num_steps - 1:
@@ -475,7 +475,7 @@ nlp = {'x': x, 'f': J, 'g': constraints.g}
 # Solver options
 opts = {}
 # opts["verbose"] = True
-opts["ipopt"] = {"max_iter": 3000,
+opts["ipopt"] = {"max_iter": 1000,
                  "fixed_variable_treatment": "make_constraint",
                  "hessian_approximation": "limited-memory",
                  "mumps_mem_percent": 10000,

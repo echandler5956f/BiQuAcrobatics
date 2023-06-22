@@ -110,7 +110,7 @@ qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
 qj = getJointAngles(kin, p_body_opt(:,:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
 qcj = [qc;qj];
 initVisualizer(robot, qcj);
-slowDown = 5;
+slowDown = 1;
 rates = {};
 for i = 1 : n_p
     rates = {rates{:}, rateControl((step_list(i)/T_opt(i))/slowDown)};
