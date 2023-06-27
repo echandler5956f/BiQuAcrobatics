@@ -130,22 +130,22 @@ eF = 5e-4
 eR = 1e5
 
 # Minimum total time
-tMin = 0.5
+tMin = 1.0
 
 # Maximum total time
-tMax = 1.5
+tMax = 2.0
 
 # Steps per contact phase
-step_list = [30, 30]
+step_list = [30, 30, 30]
 
 # Contact pattern
-contact_list = [[1, 1, 1, 1], [0, 0, 0, 0]]
+contact_list = [[1, 1, 1, 1], [0, 0, 1, 1], [0, 0, 0, 0]]
 
 # Specify the contact metadata
 cons = Contacts(step_list, contact_list)
 
 # Initial States
-p_body0 = [0, 0, 0.2]
+p_body0 = np.array([0, 0, 0.2])
 dp_body0 = np.zeros((3, 1))
 R0 = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
 tmp1 = [0.194, 0.1479, -0.2]
@@ -157,8 +157,8 @@ Omega0 = np.zeros((3, 1))
 DOmega0 = np.zeros((3, 1))
 
 # Final States
-p_bodyf = [0.4, 0, 0.25]
-Rf = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
+p_bodyf = np.array([0.4, 0.3, 0.25])
+Rf = rp.from_euler('xyz', [0, 0, 25], True).as_matrix()
 tmp2 = [0.194, 0.1479, -0.25]
 p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
                     p_bodyf + np.matmul(Rf, leg_mask(tmp2, 2)),
@@ -171,7 +171,7 @@ pbar = [0.194, 0.1479, -0.16]
 p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), leg_mask(pbar, 4)]).transpose()
 
 # Sphere of radius r that the foot position is constrained to
-r = 0.2
+r = 0.2375
 
 # Friction coefficient
 mu = 0.7
@@ -182,7 +182,7 @@ f_bounds = np.array([[-25, 25],
                      [-0.01, 35]])
 
 # Acceleration due to gravity
-g_accel = np.array([[0], [0], [-9.81]])
+g_accel = np.array([[0], [0], [9.81]])
 
 # COM bounding constraint. Ideally you would set this to some section of a
 # tube each timestep within you want the trajectory to lie
@@ -201,9 +201,9 @@ Omega_bounds = np.array([[-pi, pi],
                          [-pi, pi]])
 
 # Time derivative angular velocity bounds to make the problem more solvable
-DOmega_bounds = np.array([[-8.75, 8.75],
-                          [-8.75, 8.75],
-                          [-8.75, 8.75]])
+DOmega_bounds = np.array([[-10, 10],
+                          [-10, 10],
+                          [-10, 10]])
 
 # Mass of the SRB
 mass = 2.50000279
@@ -298,19 +298,32 @@ for k in range(cons.num_steps):
 
     if k != 0:
         # Add dummy constraints
-        constraints.add_design_constraints(dp_body_k, dp_body_bounds[:, 0], dp_body_bounds[:, 1], dp_body0, 'dp_body')
+        # if i == cons.num_cons-1:
+        #     constraints.add_design_constraints(dp_body_k, dp_body_bounds[:, 0], dp_body_bounds[:, 1],
+        #                                        (p_bodyf - p_body0)/cons.step_list[i], 'dp_body')
+        # else:
+        constraints.add_design_constraints(dp_body_k, dp_body_bounds[:, 0], dp_body_bounds[:, 1], dp_body0,
+                                           'dp_body')
         constraints.add_design_constraints(Omega_k, Omega_bounds[:, 0], Omega_bounds[:, 1], Omega0, 'Omega')
         constraints.add_design_constraints(DOmega_k, DOmega_bounds[:, 0], DOmega_bounds[:, 1], DOmega0, 'DOmega')
 
         if k != cons.num_steps - 1:
             # Add body bounding box constraints
-            constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1], p_body0, 'p_body')
+            if i == cons.num_cons - 1:
+                p_interp = (k - cons.cum_steps[i - 1]) * (p_bodyf - p_body0) / cons.step_list[i]
+                constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
+                                                   p_interp, 'p_body')
+            else:
+                constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
+                                                   p_body0, 'p_body')
             constraints.add_design_constraints(reshape(R_k, (9, 1)), np.ones((9, 1)) * (-1.05), np.ones((9, 1)) * 1.05,
                                                reshape(R_ref_k, (9, 1)), 'R')
 
     # Add friction cone, GRF, and foot position constraints to each leg
     grf = np.zeros((3, 1))
     tau = np.zeros((3, 1))
+    clegs = cons.contact_list[i][0] + cons.contact_list[i][1] + \
+            cons.contact_list[i][2] + cons.contact_list[i][3]
     if cons.contact_list[i][0]:
         # GRF on each foot (3x1)
         F_0_k = F_0[3 * k: 3 * (k + 1)]
@@ -320,7 +333,9 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_0_k[1] / F_0_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 0] - p_body_k)) - p_feet_bar[:, 0]),
                                             [0], [r])
-        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_0')
+        # constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_0')
+        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
+                                           'F_0')
     if cons.contact_list[i][1]:
         F_1_k = F_1[3 * k: 3 * (k + 1)]
         grf = grf + F_1_k
@@ -329,7 +344,9 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_1_k[1] / F_1_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 1] - p_body_k)) - p_feet_bar[:, 1]),
                                             [0], [r])
-        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_1')
+        # constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_1')
+        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
+                                           'F_1')
     if cons.contact_list[i][2]:
         F_2_k = F_2[3 * k: 3 * (k + 1)]
         grf = grf + F_2_k
@@ -338,7 +355,9 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_2_k[1] / F_2_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 2] - p_body_k)) - p_feet_bar[:, 2]),
                                             [0], [r])
-        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_2')
+        # constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_2')
+        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
+                                           'F_2')
     if cons.contact_list[i][3]:
         F_3_k = F_3[3 * k: 3 * (k + 1)]
         grf = grf + F_3_k
@@ -347,7 +366,9 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_3_k[1] / F_3_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 3] - p_body_k)) - p_feet_bar[:, 3]),
                                             [0], [r])
-        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_3')
+        # constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_3')
+        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
+                                           'F_3')
 
     # Discrete dynamics
     if k < cons.num_steps - 1:
@@ -357,7 +378,7 @@ for k in range(cons.num_steps):
         DOmega_k1 = DOmega[3 * (k + 1): 3 * (k + 2)]
         R_k1 = reshape(R[:, 3 * (k + 1): 3 * (k + 2)], (3, 3))
 
-        ddp_body = ((grf / mass) + g_accel)
+        ddp_body = ((grf / mass) - g_accel)
         p_body_next = p_body_k + (dp_body_k * dt) + ((1 / 2) * ddp_body * power(dt, 2))
         dp_body_next = dp_body_k + ddp_body * dt
         Omega_next = Omega_k + DOmega_k * dt
@@ -388,14 +409,13 @@ for k in range(cons.num_steps):
                                                 [0], [r])
 
     # Objective Function
-    e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), 4))
-    J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + \
-            (eF * mtimes(transpose(grf), grf)) + \
-            (eR * mtimes(transpose(e_R_k), e_R_k))
+    # e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), 4))
+    # J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + \
+    #         (eF * mtimes(transpose(grf), grf)) + \
+    #         (eR * mtimes(transpose(e_R_k), e_R_k))
     # J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k))
     # J = J + (eF * mtimes(transpose(grf), grf))
     # J = J + (eR * mtimes(transpose(e_R_k), e_R_k))
-
 
 x = constraints.w
 lbx = constraints.lbw
@@ -410,7 +430,29 @@ opts = {}
 # opts["verbose"] = True
 opts["ipopt"] = {"max_iter": 1000,
                  "fixed_variable_treatment": "make_constraint",
-                 # "hessian_approximation": "limited-memory",
+                 # # "nlp_scaling_method": "gradient-based",
+                 # "nlp_scaling_max_gradient": 1,
+                 # "nlp_scaling_min_value": 1e-16,
+                 # # "bound_mult_init_method": "constant",
+                 # "mu_strategy": "adaptive",
+                 # # "mu_oracle": "quality-function",
+                 # # "fixed_mu_oracle": "average_compl",
+                 # "adaptive_mu_globalization": "kkt-error",
+                 # "corrector_type": "affine",
+                 # "max_soc": 0,
+                 # "accept_every_trial_step": "yes",
+                 # "linear_system_scaling": "none",
+                 # # "neg_curv_test_tol": 0,
+                 # "neg_curv_test_reg": "yes",
+                 # "max_refinement_steps": 0,
+                 # "min_refinement_steps": 0,
+                 # # "linear_solver": "ma86",
+                 # # "ma86_order": "auto",
+                 # # "ma86_scaling": "mc64",
+                 # # "ma86_small": 1e-10,
+                 # # "ma86_static": 1,
+                 # # "recalc_y": "yes",
+                 "hessian_approximation": "limited-memory",
                  "mumps_mem_percent": 10000,
                  "print_level": 5}
 
@@ -483,3 +525,4 @@ np.savetxt('metadata/contact_list.csv', np.array(contact_list), delimiter=',')
 np.savetxt('metadata/p_feet0.csv', p_feet0, delimiter=',')
 np.savetxt('metadata/p_feetf.csv', p_feetf, delimiter=',')
 np.savetxt('metadata/p_feet_bar.csv', np.array(p_feet_bar), delimiter=',')
+np.savetxt('metadata/r.csv', [r], delimiter=',')

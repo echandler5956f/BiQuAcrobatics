@@ -53,7 +53,7 @@ contact_list = table2array(readtable(pwd + "\python\metadata\contact_list"));
 p_feet0 = table2array(readtable(pwd + "\python\metadata\p_feet0"));
 p_feetf = table2array(readtable(pwd + "\python\metadata\p_feetf"));
 p_feet_bar = table2array(readtable(pwd + "\python\metadata\p_feet_bar"));
-r = 0.25;
+r = table2array(readtable(pwd + "\python\metadata\r"));
 
 n_p = size(step_list, 1);
 Nch = cumsum(step_list);
@@ -191,6 +191,7 @@ end
 
 function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     p_body0, old_plts)
+    p_body = q(4:6);
     q = [q(1:6);
         -q(7);q(8:9);
         q(10:12);
@@ -217,8 +218,7 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
             p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
             "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
             "ShowArrowHead","on")];
-        tmp = p_feet_bar(:,leg);
-        tr = tmp;
+        tr = R*(p_body + p_feet_bar(:,leg));
         [x,y,z] = sphere;
         x = x*r + tr(1);
         y = y*r + tr(2);
