@@ -13,8 +13,8 @@ hipLinkLength = 0.160;
 kneeLinkY_offset = 0.04745;
 kneeLinkLength = 0.1675;
 bounds = [deg2rad(-90), deg2rad(90);
-          deg2rad(-90), deg2rad(90);
-          deg2rad(-90), deg2rad(90)];
+          deg2rad(-125), deg2rad(125);
+          deg2rad(-175), deg2rad(175)];
 PM = utils.tdh(pi/2, 0, bodyHalfWidth, -pi/2) * ...
      utils.tdh(0, -bodyHalfLength, 0, 0);
 omegaList = [[0;0;1], [1;0;0], [1;0;0]];
@@ -29,9 +29,15 @@ M = [R_home, t_home;
      0, 0, 0, 1];
 kin = kinematics.KinematicsPOE(PM,M,omegaList,pList,q,bounds,6,3);
 
-%  Verify kinematics
-
-% q1 = [deg2rad(5);deg2rad(-45);deg2rad(45)];
+% Verify kinematics
+% close all;
+% p_feet_des = [[0.225;0.175;0], zeros(3)];
+% q1 = getJointAngles(kin, [0;0;0.125], eye(3), p_feet_des,  [deg2rad(5);deg2rad(-45);deg2rad(-45);zeros(9,1)]);
+% q1 = [-q1(1);q1(2:3)];
+% % q1 = [deg2rad(0);deg2rad(-45);deg2rad(110)];
+% % q1 = [deg2rad(5);deg2rad(-45);deg2rad(45)];
+% % q1 = kin.ik([0;0;0.1], [0;0;0]);
+% disp(q1)
 % x1 = kin.fk([-q1(1);q1(2);q1(3)]);
 % disp(x1);
 % robot = importrobot("solo_12\urdf\solo_12_leg.urdf","DataFormat","column");
@@ -101,6 +107,22 @@ for k = 1 : Nc
     end
     F_opt(:,:,k) = F_k;
 end
+
+% Test Body Bounds
+% close all;
+% des_height = 0.15;
+% qc_test = [0;0;0;0;0;des_height];
+% qj_test = getJointAngles(kin, [0;0;des_height], eye(3), p_feet_opt(:,:,1), zeros(12,1));
+% qcj_test = [qc_test;qj_test];
+% qcj_test = [qcj_test(1:6);
+%     -qcj_test(7);qcj_test(8:9);
+%     qcj_test(10:12);
+%     -qcj_test(13:15);
+%     qcj_test(16);-qcj_test(17:18)];
+% robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
+% 
+% initVisualizer(robot, qcj_test);
+% plot3(0,0,des_height, 'or');
 
 %% Visualization
 close all;

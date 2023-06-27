@@ -4,78 +4,6 @@ from scipy.spatial.transform import Rotation as rp
 from scipy.spatial.transform import Slerp
 
 
-class LogMap(Callback):
-    def __init__(self, name, d, opts={}):
-        Callback.__init__(self)
-        self.d = d
-        self.construct(name, opts)
-
-    def get_n_in(self):
-        return 1
-
-    def get_n_out(self):
-        return 1
-
-    def get_sparsity_in(self, i):
-        return Sparsity.dense(3, 3)
-
-    def get_sparsity_out(self, i):
-        return Sparsity.dense(1, 1)
-
-    def eval(self, arg):
-        x_mat = arg[0]
-        r_err = mtimes(transpose(self.d), x_mat)
-        q = self.matrix_to_quat(r_err)
-        e_r = self.quat_to_axis_angle(q)
-        scalarized = mtimes(transpose(e_r), e_r)
-        # jacobian of this quadratic form is 2transpose(x)dx
-        return [scalarized]
-
-    def matrix_to_quat(self, r):
-        tr = trace(r)
-        if trace(r) > 0:
-            t = sqrt(1 + tr)
-            q_r = (0.5 * t)
-            q_v = (0.5 / t) * inv_skew(r - transpose(r))
-            q_x = q_v[0]
-            q_y = q_v[1]
-            q_z = q_v[2]
-        elif r[0, 0] >= r[1, 1] and r[0, 0] >= r[2, 2]:
-            t = sqrt(1 + r[0, 0] - r[1, 1] - r[2, 2])
-            q_r = (0.5 / t) * (r[2, 1] - r[1, 2])
-            q_x = (0.5 * t)
-            q_y = (0.5 / t) * (r[1, 0] + r[0, 1])
-            q_z = (0.5 / t) * (r[2, 0] + r[0, 2])
-        elif r[1, 1] > r[0, 0] and r[1, 1] >= r[2, 2]:
-            t = sqrt(1 + r[1, 1] - r[2, 2] - r[0, 0])
-            q_r = (0.5 / t) * (r[0, 2] - r[2, 0])
-            q_x = (0.5 / t) * (r[0, 1] + r[1, 0])
-            q_y = (0.5 * t)
-            q_z = (0.5 / t) * (r[2, 1] + r[1, 2])
-        elif r[2, 2] > r[0, 0] and r[2, 2] > r[1, 1]:
-            t = sqrt(1 + r[2, 2] - r[0, 0] - r[1, 1])
-            q_r = (0.5 / t) * (r[1, 0] - r[0, 1])
-            q_x = (0.5 / t) * (r[0, 2] + r[2, 0])
-            q_y = (0.5 / t) * (r[1, 2] + r[2, 1])
-            q_z = (0.5 * t)
-        else:
-            q_r = 0
-            q_x = 0
-            q_y = 0
-            q_z = 0
-            print("This should not be possible.")
-        return vertcat(q_r, q_x, q_y, q_z)
-
-    def quat_to_axis_angle(self, q):
-        q = sign(q) * q
-        q_r, q_x, q_y, q_z = vertsplit(q)
-        q_v = vertcat(q_x, q_y, q_z)
-        if norm_2(q_v) < 1:
-            return ((2 / q_r) - (2 / 3) * (power(norm_2(q_v), 2) / power(q_r, 3))) * q_v
-        else:
-            return 4 * atan(norm_2(q_v)/(q_r + sqrt(power(q_r, 2) + power(norm_2(q_v), 2)))) * (q_v / norm_2(q_v))
-
-
 class DesignField:
     def __init__(self, size, split_flag):
         self.size = size
@@ -156,6 +84,13 @@ def approximate_exp_a(a, deg):
     return exp_a
 
 
+def approximate_log_a(a, deg):
+    log_a = DM(np.zeros((3, 3)))
+    for i in range(1, deg):
+        log_a = log_a + power(-1, i + 1) * mpower(a - DM(np.eye(3)), i) / i
+    return log_a
+
+
 def leg_mask(pos, leg):
     if leg == 1:
         return pos
@@ -175,20 +110,24 @@ def rand_in_bounds(bounds):
     n = len(bounds)
     r = np.zeros((n, 1))
     for i in range(n):
-        r[i, 0] = (bounds[i, 1] - bounds[i, 0]) * np.random.rand() + bounds[i, 0]
+        r[i, 0] = rand_in_range(bounds[i, :])
     return r
+
+
+def rand_in_range(bound):
+    return (bound[1] - bound[0]) * np.random.rand() + bound[0]
 
 
 # Constant Parameters
 
 # Omega cost weight
-eOmega = 0.0875
+eOmega = 1e5
 
 # Force cost weight
-eF = 0.0009125
+eF = 5e-4
 
 # Rotation error cost weight
-eR = 0.1
+eR = 1e5
 
 # Minimum total time
 tMin = 0.5
@@ -197,19 +136,19 @@ tMin = 0.5
 tMax = 1.5
 
 # Steps per contact phase
-step_list = [30, 30, 30]
+step_list = [30, 30]
 
 # Contact pattern
-contact_list = [[1, 1, 1, 1],  [0, 0, 1, 1], [0, 0, 0, 0]]
+contact_list = [[1, 1, 1, 1], [0, 0, 0, 0]]
 
 # Specify the contact metadata
 cons = Contacts(step_list, contact_list)
 
 # Initial States
-p_body0 = [0, 0, 0.3125]
+p_body0 = [0, 0, 0.2]
 dp_body0 = np.zeros((3, 1))
 R0 = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
-tmp1 = [0.151, 0.1759, -0.3125]
+tmp1 = [0.194, 0.1479, -0.2]
 p_feet0 = np.array([p_body0 + np.matmul(R0, leg_mask(tmp1, 1)),
                     p_body0 + np.matmul(R0, leg_mask(tmp1, 2)),
                     p_body0 + np.matmul(R0, leg_mask(tmp1, 3)),
@@ -218,9 +157,9 @@ Omega0 = np.zeros((3, 1))
 DOmega0 = np.zeros((3, 1))
 
 # Final States
-p_bodyf = [0.4, 0.3, 0.275]
-Rf = rp.from_euler('xyz', [0, 0, 45], True).as_matrix()
-tmp2 = [0.225, 0.175, -0.275]
+p_bodyf = [0.4, 0, 0.25]
+Rf = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
+tmp2 = [0.194, 0.1479, -0.25]
 p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
                     p_bodyf + np.matmul(Rf, leg_mask(tmp2, 2)),
                     p_bodyf + np.matmul(Rf, leg_mask(tmp2, 3)),
@@ -228,18 +167,18 @@ p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
-pbar = [0.2, 0.2, -0.16]
+pbar = [0.194, 0.1479, -0.16]
 p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), leg_mask(pbar, 4)]).transpose()
 
 # Sphere of radius r that the foot position is constrained to
-r = 0.2625
+r = 0.2
 
 # Friction coefficient
 mu = 0.7
 
 # GRF limits
-f_bounds = np.array([[-12.5, 12.5],
-                     [-12.5, 12.5],
+f_bounds = np.array([[-25, 25],
+                     [-25, 25],
                      [-0.01, 35]])
 
 # Acceleration due to gravity
@@ -270,9 +209,9 @@ DOmega_bounds = np.array([[-8.75, 8.75],
 mass = 2.50000279
 
 # Inertia of SRB
-inertia = np.array([[3.09249e-2, -9.00101e-7, 1.865287e-5],
-                    [-8.00101e-7, 5.106100e-2, 1.245813e-4],
-                    [1.865287e-5, 1.245813e-4, 6.939757e-2]])
+inertia = np.array([[3.09249e-2, 0, 0],
+                    [0, 5.106100e-2, 0],
+                    [0, 0, 6.939757e-2]])
 inv_inertia = np.linalg.inv(inertia)
 
 # Decision Variables
@@ -304,12 +243,6 @@ F_0 = []
 F_1 = []
 F_2 = []
 F_3 = []
-
-# Logarithm function callback
-log_callback_fun_helper = []
-
-# Rotation matrix scalarized error function (3x3 -> 1x1)
-log_callback_fun = []
 
 # Optimal contact timing for the ith contact phase (n_px1)
 T = MX.sym('T', cons.num_cons, 1)
@@ -387,7 +320,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_0_k[1] / F_0_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 0] - p_body_k)) - p_feet_bar[:, 0]),
                                             [0], [r])
-        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], np.array([0,0,mass/4]), 'F_0')
+        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_0')
     if cons.contact_list[i][1]:
         F_1_k = F_1[3 * k: 3 * (k + 1)]
         grf = grf + F_1_k
@@ -396,7 +329,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_1_k[1] / F_1_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 1] - p_body_k)) - p_feet_bar[:, 1]),
                                             [0], [r])
-        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], np.array([0,0,mass/4]), 'F_1')
+        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_1')
     if cons.contact_list[i][2]:
         F_2_k = F_2[3 * k: 3 * (k + 1)]
         grf = grf + F_2_k
@@ -405,7 +338,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_2_k[1] / F_2_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 2] - p_body_k)) - p_feet_bar[:, 2]),
                                             [0], [r])
-        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], np.array([0,0,mass/4]), 'F_2')
+        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_2')
     if cons.contact_list[i][3]:
         F_3_k = F_3[3 * k: 3 * (k + 1)]
         grf = grf + F_3_k
@@ -414,7 +347,7 @@ for k in range(cons.num_steps):
         constraints.add_general_constraints(fabs(F_3_k[1] / F_3_k[2]), [0], [mu])
         constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 3] - p_body_k)) - p_feet_bar[:, 3]),
                                             [0], [r])
-        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], np.array([0,0,mass/4]), 'F_3')
+        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], rand_in_bounds(f_bounds), 'F_3')
 
     # Discrete dynamics
     if k < cons.num_steps - 1:
@@ -455,14 +388,14 @@ for k in range(cons.num_steps):
                                                 [0], [r])
 
     # Objective Function
+    e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), 4))
+    J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + \
+            (eF * mtimes(transpose(grf), grf)) + \
+            (eR * mtimes(transpose(e_R_k), e_R_k))
+    # J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k))
+    # J = J + (eF * mtimes(transpose(grf), grf))
+    # J = J + (eR * mtimes(transpose(e_R_k), e_R_k))
 
-    log_callback_k = LogMap('log_callback_k{}'.format(k), R_ref_k, {"enable_fd": True})
-    fun_k = Function('fun_k{}'.format(k), [R_k], [log_callback_k(R_k)])
-
-    log_callback_fun_helper = [log_callback_fun_helper, log_callback_k]
-    log_callback_fun = [log_callback_fun, fun_k]
-
-    J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + (eF * mtimes(transpose(grf), grf)) + (eR * fun_k(R_k))
 
 x = constraints.w
 lbx = constraints.lbw
@@ -475,11 +408,18 @@ nlp = {'x': x, 'f': J, 'g': constraints.g}
 # Solver options
 opts = {}
 # opts["verbose"] = True
-opts["ipopt"] = {"max_iter": 100,
+opts["ipopt"] = {"max_iter": 1000,
                  "fixed_variable_treatment": "make_constraint",
-                 "hessian_approximation": "limited-memory",
+                 # "hessian_approximation": "limited-memory",
                  "mumps_mem_percent": 10000,
                  "print_level": 5}
+
+# warm_start_init_point yes
+# warm_start_bound_push 1e-9
+# warm_start_bound_frac 1e-9
+# warm_start_slack_bound_frac 1e-9
+# warm_start_slack_bound_push 1e-9
+# warm_start_mult_bound_push 1e-9
 
 # Allocate a solver
 solver = nlpsol("solver", "ipopt", nlp, opts)
