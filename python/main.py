@@ -217,9 +217,9 @@ inv_inertia = np.linalg.inv(inertia)
 # Decision Variables
 
 # Set up constraint structure
-fields = ['T', 'p_body', 'dp_body', 'Omega', 'DOmega', 'R', 'F_0', 'F_1', 'F_2', 'F_3']
-sizes = [(cons.num_cons, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 3), (3, 1), (3, 1), (3, 1), (3, 1)]
-split_flags = [False, False, False, False, False, False, False, False, False, False]
+fields = ['T', 'p_body', 'dp_body', 'Omega', 'DOmega', 'F_0', 'F_1', 'F_2', 'F_3']
+sizes = [(cons.num_cons, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 1)]
+split_flags = [False, False, False, False, False, False, False, False, False]
 constraints = CTConstraints(fields, sizes, split_flags)
 
 # COM of the body (3x1)
@@ -254,13 +254,22 @@ constraints.add_general_constraints(sum1(T), [tMin], [tMax])
 constraints.add_design_constraints(T, np.ones((cons.num_cons, 1)) * (tMin / (cons.num_cons + 1)),
                                    np.ones((cons.num_cons, 1)) * tMax,
                                    np.ones((cons.num_cons, 1)) * ((tMax - tMin) / cons.num_cons), 'T')
-
+R_k = R0
 for k in range(cons.num_steps):
+    i = cons.get_current_phase(k)
+    dt = T[i] / cons.step_list[i]
+
     p_body = vertcat(p_body, MX.sym('p_body_k{}'.format(k), 3, 1))
     dp_body = vertcat(dp_body, MX.sym('dp_body_k{}'.format(k), 3, 1))
-    Omega = vertcat(Omega, MX.sym('Omega_k{}'.format(k), 3, 1))
+    Omega_k = MX.sym('Omega_k{}'.format(k), 3, 1)
+    Omega = vertcat(Omega, Omega_k)
     DOmega = vertcat(DOmega, MX.sym('DOmega_k{}'.format(k), 3, 1))
-    R = horzcat(R, MX.sym('R_k{}'.format(k), 3, 3))
+    if k == 0:
+        R = horzcat(R, R_k)
+    else:
+        R_k = mtimes(R_k, approximate_exp_a(skew(Omega_k * dt), 4))
+        R = horzcat(R, R_k)
+
     if cons.contact_list[cons.get_current_phase(k)][0]:
         F_0 = vertcat(F_0, MX.sym('F_0_k{}'.format(k), 3, 1))
     if cons.contact_list[cons.get_current_phase(k)][1]:
@@ -316,8 +325,6 @@ for k in range(cons.num_steps):
             else:
                 constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
                                                    p_body0, 'p_body')
-            constraints.add_design_constraints(reshape(R_k, (9, 1)), np.ones((9, 1)) * (-1.05), np.ones((9, 1)) * 1.05,
-                                               reshape(R_ref_k, (9, 1)), 'R')
 
     # Add friction cone, GRF, and foot position constraints to each leg
     grf = np.zeros((3, 1))
@@ -376,20 +383,17 @@ for k in range(cons.num_steps):
         dp_body_k1 = dp_body[3 * (k + 1): 3 * (k + 2)]
         Omega_k1 = Omega[3 * (k + 1): 3 * (k + 2)]
         DOmega_k1 = DOmega[3 * (k + 1): 3 * (k + 2)]
-        R_k1 = reshape(R[:, 3 * (k + 1): 3 * (k + 2)], (3, 3))
 
         ddp_body = ((grf / mass) - g_accel)
         p_body_next = p_body_k + (dp_body_k * dt) + ((1 / 2) * ddp_body * power(dt, 2))
         dp_body_next = dp_body_k + ddp_body * dt
         Omega_next = Omega_k + DOmega_k * dt
         DOmega_next = mtimes(inv_inertia, (mtimes(transpose(R_k), tau) - cross(Omega_k, mtimes(inertia, Omega_k))))
-        R_next = mtimes(R_k, approximate_exp_a(skew(Omega_k * dt), 4))
 
         constraints.add_general_constraints(p_body_k1 - p_body_next, np.zeros((3, 1)), np.zeros((3, 1)))
         constraints.add_general_constraints(dp_body_k1 - dp_body_next, np.zeros((3, 1)), np.zeros((3, 1)))
         constraints.add_general_constraints(Omega_k1 - Omega_next, np.zeros((3, 1)), np.zeros((3, 1)))
         constraints.add_general_constraints(DOmega_k1 - DOmega_next, np.zeros((3, 1)), np.zeros((3, 1)))
-        constraints.add_general_constraints(reshape(R_k1 - R_next, 9, 1), np.zeros((9, 1)), np.zeros((9, 1)))
 
     # Initial States
     if k == 0:
@@ -397,13 +401,9 @@ for k in range(cons.num_steps):
         constraints.add_design_constraints(dp_body_k, dp_body0, dp_body0, dp_body0, 'dp_body')
         constraints.add_design_constraints(Omega_k, Omega0, Omega0, Omega0, 'Omega')
         constraints.add_design_constraints(DOmega_k, DOmega0, DOmega0, DOmega0, 'DOmega')
-        constraints.add_design_constraints(reshape(R_k, (9, 1)), np.reshape(R0, (9, 1)),
-                                           np.reshape(R0, (9, 1)), np.reshape(R0, (9, 1)), 'R')
 
     if k == cons.num_steps - 1:
         constraints.add_design_constraints(p_body_k, p_bodyf, p_bodyf, p_bodyf, 'p_body')
-        constraints.add_design_constraints(reshape(R_k, (9, 1)), np.reshape(Rf, (9, 1)),
-                                           np.reshape(Rf, (9, 1)), np.reshape(Rf, (9, 1)), 'R')
         for leg in range(4):
             constraints.add_general_constraints(norm_2(mtimes(Rf, (p_feetf[:, leg] - p_body_k)) - p_feet_bar[:, leg]),
                                                 [0], [r])
@@ -477,7 +477,7 @@ p_body_opt = constraints.unpack_indices(sol_x, "p_body")
 dp_body_opt = constraints.unpack_indices(sol_x, "dp_body")
 Omega_opt = constraints.unpack_indices(sol_x, "Omega")
 DOmega_opt = constraints.unpack_indices(sol_x, "DOmega")
-R_opt = constraints.unpack_indices(sol_x, "R")
+# R_opt = constraints.unpack_indices(sol_x, "R")
 F_0_opt = constraints.unpack_indices(sol_x, "F_0")
 F_1_opt = constraints.unpack_indices(sol_x, "F_1")
 F_2_opt = constraints.unpack_indices(sol_x, "F_2")
@@ -488,7 +488,7 @@ p_body_opt = p_body_opt.reshape(p_body_opt.shape[0], -1)
 dp_body_opt = dp_body_opt.reshape(dp_body_opt.shape[0], -1)
 Omega_opt = Omega_opt.reshape(Omega_opt.shape[0], -1)
 DOmega_opt = DOmega_opt.reshape(DOmega_opt.shape[0], -1)
-R_opt = R_opt.reshape(cons.num_steps, 9)
+# R_opt = R_opt.reshape(cons.num_steps, 9)
 F_0_opt = F_0_opt.reshape(F_0_opt.shape[0], -1)
 F_1_opt = F_1_opt.reshape(F_1_opt.shape[0], -1)
 F_2_opt = F_2_opt.reshape(F_2_opt.shape[0], -1)
@@ -514,7 +514,7 @@ np.savetxt('opt/p_body_opt.csv', p_body_opt, delimiter=',')
 np.savetxt('opt/dp_body_opt.csv', dp_body_opt, delimiter=',')
 np.savetxt('opt/Omega_opt.csv', Omega_opt, delimiter=',')
 np.savetxt('opt/DOmega_opt.csv', DOmega_opt, delimiter=',')
-np.savetxt('opt/R_opt.csv', R_opt, delimiter=',')
+# np.savetxt('opt/R_opt.csv', R_opt, delimiter=',')
 np.savetxt('opt/F_0_opt.csv', F_0_opt, delimiter=',')
 np.savetxt('opt/F_1_opt.csv', F_1_opt, delimiter=',')
 np.savetxt('opt/F_2_opt.csv', F_2_opt, delimiter=',')
