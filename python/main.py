@@ -91,6 +91,18 @@ def approximate_log_a(a, deg):
     return log_a
 
 
+def integrate_omega_history(cons, R0, Omega_opt, T_opt):
+    R_opt = np.zeros((cons.num_steps, 3, 3))
+    R_k = R0
+    for k in range(cons.num_steps):
+        i = cons.get_current_phase(k)
+        dt = T_opt[0, 0, i]/cons.step_list[i]
+        if k != 0:
+            R_k = np.matmul(R_k, approximate_exp_a(skew(Omega_opt[k, :, :] * dt), 4))
+        R_opt[k, 0:3, 0:3] = transpose(R_k)
+    return R_opt
+
+
 def leg_mask(pos, leg):
     if leg == 1:
         return pos
@@ -130,10 +142,10 @@ eF = 5e-4
 eR = 1e5
 
 # Minimum total time
-tMin = 1.0
+tMin = 0.5
 
 # Maximum total time
-tMax = 2.0
+tMax = 1.5
 
 # Steps per contact phase
 step_list = [30, 30, 30]
@@ -158,7 +170,7 @@ DOmega0 = np.zeros((3, 1))
 
 # Final States
 p_bodyf = np.array([0.4, 0.3, 0.25])
-Rf = rp.from_euler('xyz', [0, 0, 25], True).as_matrix()
+Rf = rp.from_euler('xyz', [0, 0, 45], True).as_matrix()
 tmp2 = [0.194, 0.1479, -0.25]
 p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
                     p_bodyf + np.matmul(Rf, leg_mask(tmp2, 2)),
@@ -403,9 +415,10 @@ for k in range(cons.num_steps):
         constraints.add_design_constraints(DOmega_k, DOmega0, DOmega0, DOmega0, 'DOmega')
 
     if k == cons.num_steps - 1:
+        constraints.add_general_constraints(reshape(R_k, (9, 1)), np.reshape(Rf, (9, 1)), np.reshape(Rf, (9, 1)))
         constraints.add_design_constraints(p_body_k, p_bodyf, p_bodyf, p_bodyf, 'p_body')
         for leg in range(4):
-            constraints.add_general_constraints(norm_2(mtimes(Rf, (p_feetf[:, leg] - p_body_k)) - p_feet_bar[:, leg]),
+            constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feetf[:, leg] - p_body_k)) - p_feet_bar[:, leg]),
                                                 [0], [r])
 
     # Objective Function
@@ -477,6 +490,7 @@ p_body_opt = constraints.unpack_indices(sol_x, "p_body")
 dp_body_opt = constraints.unpack_indices(sol_x, "dp_body")
 Omega_opt = constraints.unpack_indices(sol_x, "Omega")
 DOmega_opt = constraints.unpack_indices(sol_x, "DOmega")
+R_opt = integrate_omega_history(cons, R0, Omega_opt, T_opt)
 # R_opt = constraints.unpack_indices(sol_x, "R")
 F_0_opt = constraints.unpack_indices(sol_x, "F_0")
 F_1_opt = constraints.unpack_indices(sol_x, "F_1")
@@ -488,7 +502,7 @@ p_body_opt = p_body_opt.reshape(p_body_opt.shape[0], -1)
 dp_body_opt = dp_body_opt.reshape(dp_body_opt.shape[0], -1)
 Omega_opt = Omega_opt.reshape(Omega_opt.shape[0], -1)
 DOmega_opt = DOmega_opt.reshape(DOmega_opt.shape[0], -1)
-# R_opt = R_opt.reshape(cons.num_steps, 9)
+R_opt = R_opt.reshape(cons.num_steps, 9)
 F_0_opt = F_0_opt.reshape(F_0_opt.shape[0], -1)
 F_1_opt = F_1_opt.reshape(F_1_opt.shape[0], -1)
 F_2_opt = F_2_opt.reshape(F_2_opt.shape[0], -1)
@@ -514,7 +528,7 @@ np.savetxt('opt/p_body_opt.csv', p_body_opt, delimiter=',')
 np.savetxt('opt/dp_body_opt.csv', dp_body_opt, delimiter=',')
 np.savetxt('opt/Omega_opt.csv', Omega_opt, delimiter=',')
 np.savetxt('opt/DOmega_opt.csv', DOmega_opt, delimiter=',')
-# np.savetxt('opt/R_opt.csv', R_opt, delimiter=',')
+np.savetxt('opt/R_opt.csv', R_opt, delimiter=',')
 np.savetxt('opt/F_0_opt.csv', F_0_opt, delimiter=',')
 np.savetxt('opt/F_1_opt.csv', F_1_opt, delimiter=',')
 np.savetxt('opt/F_2_opt.csv', F_2_opt, delimiter=',')
