@@ -133,13 +133,13 @@ def rand_in_range(bound):
 # Constant Parameters
 
 # Omega cost weight
-eOmega = 1e5
+eOmega = 1e-2
 
 # Force cost weight
-eF = 5e-4
+eF = 1e-6
 
 # Rotation error cost weight
-eR = 1e5
+eR = 1e-3
 
 # Minimum total time
 tMin = 0.5
@@ -191,7 +191,7 @@ mu = 0.7
 # GRF limits
 f_bounds = np.array([[-25, 25],
                      [-25, 25],
-                     [-0.6, 35]])
+                     [-0.01, 35]])
 
 # Acceleration due to gravity
 g_accel = np.array([[0], [0], [9.81]])
@@ -422,13 +422,13 @@ for k in range(cons.num_steps):
                                                 [0], [r])
 
     # Objective Function
-    # e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), 4))
+    e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), 4))
     # J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + \
     #         (eF * mtimes(transpose(grf), grf)) + \
     #         (eR * mtimes(transpose(e_R_k), e_R_k))
-    # J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k))
-    # J = J + (eF * mtimes(transpose(grf), grf))
-    # J = J + (eR * mtimes(transpose(e_R_k), e_R_k))
+    J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k))
+    J = J + (eF * mtimes(transpose(grf), grf))
+    J = J + (eR * mtimes(transpose(e_R_k), e_R_k))
 
 x = constraints.w
 lbx = constraints.lbw
