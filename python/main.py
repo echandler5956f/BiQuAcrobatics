@@ -191,7 +191,7 @@ mu = 0.7
 # GRF limits
 f_bounds = np.array([[-25, 25],
                      [-25, 25],
-                     [-0.01, 35]])
+                     [-0.6, 35]])
 
 # Acceleration due to gravity
 g_accel = np.array([[0], [0], [9.81]])
@@ -200,7 +200,7 @@ g_accel = np.array([[0], [0], [9.81]])
 # tube each timestep within you want the trajectory to lie
 p_body_bounds = np.array([[-1, 1],
                           [-1, 1],
-                          [-0.01, 1]])
+                          [0, 1]])
 
 # Velocity bounds to make the problem more solvable
 dp_body_bounds = np.array([[-2.5, 2.5],
