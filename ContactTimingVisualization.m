@@ -70,10 +70,10 @@ f_idx = [0;0;0;0];
 for i = 1 : n_p
     f_idx = f_idx + transpose(contact_list(i, :));
 end
-F_0_opt = reshape(table2array(readtable(pwd + "\python\opt\F_0_opt")), 3, 1, Nch(f_idx(1)));
-F_1_opt = reshape(table2array(readtable(pwd + "\python\opt\F_1_opt")), 3, 1, Nch(f_idx(2)));
-F_2_opt = reshape(table2array(readtable(pwd + "\python\opt\F_2_opt")), 3, 1, Nch(f_idx(3)));
-F_3_opt = reshape(table2array(readtable(pwd + "\python\opt\F_3_opt")), 3, 1, Nch(f_idx(4)));
+F_0_opt = reshape(transpose(table2array(readtable(pwd + "\python\opt\F_0_opt"))), 3, 1, Nch(f_idx(1)));
+F_1_opt = reshape(transpose(table2array(readtable(pwd + "\python\opt\F_1_opt"))), 3, 1, Nch(f_idx(2)));
+F_2_opt = reshape(transpose(table2array(readtable(pwd + "\python\opt\F_2_opt"))), 3, 1, Nch(f_idx(3)));
+F_3_opt = reshape(transpose(table2array(readtable(pwd + "\python\opt\F_3_opt"))), 3, 1, Nch(f_idx(4)));
 T_opt = table2array(readtable(pwd + "\python\opt\T_opt"));
 
 F_opt = zeros(3, 4, Nc);

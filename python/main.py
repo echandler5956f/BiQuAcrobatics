@@ -5,7 +5,8 @@ from scipy.spatial.transform import Slerp
 
 
 class DesignField:
-    def __init__(self, size, split_flag):
+    def __init__(self, field_name, size, split_flag):
+        self.field_name = field_name
         self.size = size
         self.split_flag = split_flag
         self.indices = []
@@ -13,7 +14,8 @@ class DesignField:
 
 class CTConstraints:
     def __init__(self, field_name_list, size_list, split_list):
-        self.fields = {field_name: DesignField(size, split_flag) for (field_name, size, split_flag) in
+        self.field_name_list = field_name_list
+        self.fields = {field_name: DesignField(field_name, size, split_flag) for (field_name, size, split_flag) in
                        zip(field_name_list, size_list, split_list)}
         self.current_index = 0
         self.w = []
@@ -47,7 +49,7 @@ class CTConstraints:
         else:
             print("Wrong size in design constraints dummy")
 
-    def unpack_indices(self, w_opt, field_name):
+    def unpack_opt_indices(self, opt, field_name):
         f_field = self.fields[field_name]
         n = len(f_field.indices)
         s1, s2 = f_field.size
@@ -56,10 +58,28 @@ class CTConstraints:
             for i in range(int(floor(n / s2))):
                 for j in range(s2):
                     tmp_var = f_field.indices[i:i + s2 - 1]
-                    opt_design_vars[:, j, i] = np.reshape(w_opt[tmp_var], s1)
+                    opt_design_vars[:, j, i] = np.reshape(opt[tmp_var], s1)
             return opt_design_vars
         else:
-            return np.reshape(w_opt[f_field.indices], (int(floor(n / (s1 * s2))), s2, s1))
+            return np.reshape(opt[f_field.indices], (int(floor(n / (s1 * s2))), s2, s1))
+
+    def unpack_all(self, opt_x, check_violations):
+        solution = {field_name: {"opt_x": self.unpack_opt_indices(opt_x, field_name),
+                                 "lb_x": self.unpack_opt_indices(self.lbw, field_name),
+                                 "ub_x": self.unpack_opt_indices(self.ubw, field_name)}
+                    for (field_name) in self.field_name_list}
+        if check_violations:
+            for field_name in self.field_name_list:
+                f_field = self.fields[field_name]
+                s1, s2 = f_field.size
+                val = solution[field_name]
+                n = len(self.fields[field_name].indices)
+                for k in range(n):
+                    if np.any(val["opt_x"].flatten()[k] < val["lb_x"].flatten()[k]):
+                        print(field_name + " violated LOWER bound at iteration " + str(int(floor(k / (s1 * s2)))))
+                    if np.any(val["opt_x"].flatten()[k] > val["ub_x"].flatten()[k]):
+                        print(field_name + " violated UPPER bound at iteration " + str(int(floor(k / (s1 * s2)))))
+        return solution
 
 
 class Contacts:
@@ -96,7 +116,7 @@ def integrate_omega_history(cons, R0, Omega_opt, T_opt):
     R_k = R0
     for k in range(cons.num_steps):
         i = cons.get_current_phase(k)
-        dt = T_opt[0, 0, i]/cons.step_list[i]
+        dt = T_opt[0, 0, i] / cons.step_list[i]
         if k != 0:
             R_k = np.matmul(R_k, approximate_exp_a(skew(Omega_opt[k, :, :] * dt), 4))
         R_opt[k, 0:3, 0:3] = transpose(R_k)
@@ -191,7 +211,7 @@ mu = 0.7
 # GRF limits
 f_bounds = np.array([[-25, 25],
                      [-25, 25],
-                     [-0.01, 35]])
+                     [0, 35]])
 
 # Acceleration due to gravity
 g_accel = np.array([[0], [0], [9.81]])
@@ -485,17 +505,18 @@ sol_f = sol["f"]
 sol_x = sol["x"]
 sol_lam_x = sol["lam_x"]
 sol_lam_g = sol["lam_g"]
-T_opt = constraints.unpack_indices(sol_x, "T")
-p_body_opt = constraints.unpack_indices(sol_x, "p_body")
-dp_body_opt = constraints.unpack_indices(sol_x, "dp_body")
-Omega_opt = constraints.unpack_indices(sol_x, "Omega")
-DOmega_opt = constraints.unpack_indices(sol_x, "DOmega")
+solution = constraints.unpack_all(sol_x, True)
+T_opt = solution["T"]["opt_x"]
+p_body_opt = solution["p_body"]["opt_x"]
+dp_body_opt = solution["dp_body"]["opt_x"]
+Omega_opt = solution["Omega"]["opt_x"]
+DOmega_opt = solution["DOmega"]["opt_x"]
 R_opt = integrate_omega_history(cons, R0, Omega_opt, T_opt)
 # R_opt = constraints.unpack_indices(sol_x, "R")
-F_0_opt = constraints.unpack_indices(sol_x, "F_0")
-F_1_opt = constraints.unpack_indices(sol_x, "F_1")
-F_2_opt = constraints.unpack_indices(sol_x, "F_2")
-F_3_opt = constraints.unpack_indices(sol_x, "F_3")
+F_0_opt = solution["F_0"]["opt_x"]
+F_1_opt = solution["F_1"]["opt_x"]
+F_2_opt = solution["F_2"]["opt_x"]
+F_3_opt = solution["F_3"]["opt_x"]
 
 T_opt = T_opt.reshape(T_opt.shape[0], -1)
 p_body_opt = p_body_opt.reshape(p_body_opt.shape[0], -1)
