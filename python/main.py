@@ -209,9 +209,9 @@ r = 0.2375
 mu = 0.7
 
 # GRF limits
-f_bounds = np.array([[-25, 25],
-                     [-25, 25],
-                     [0, 35]])
+f_bounds = np.array([[-10, 10],
+                     [-10, 10],
+                     [0, 20]])
 
 # Acceleration due to gravity
 g_accel = np.array([[0], [0], [9.81]])
