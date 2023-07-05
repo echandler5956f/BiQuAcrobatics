@@ -111,14 +111,14 @@ def approximate_log_a(a, deg):
     return log_a
 
 
-def integrate_omega_history(cons, R0, Omega_opt, T_opt):
+def integrate_omega_history(cons, R0, Omega_opt, T_opt, e_terms):
     R_opt = np.zeros((cons.num_steps, 3, 3))
     R_k = R0
     for k in range(cons.num_steps):
         i = cons.get_current_phase(k)
         dt = T_opt[0, 0, i] / cons.step_list[i]
         if k != 0:
-            R_k = np.matmul(R_k, approximate_exp_a(skew(Omega_opt[k, :, :] * dt), 4))
+            R_k = np.matmul(R_k, approximate_exp_a(skew(Omega_opt[k, :, :] * dt), e_terms))
         R_opt[k, 0:3, 0:3] = transpose(R_k)
     return R_opt
 
@@ -153,7 +153,7 @@ def rand_in_range(bound):
 # Constant Parameters
 
 # Omega cost weight
-eOmega = 1e-2
+eOmega = 5e-5
 
 # Force cost weight
 eF = 1e-6
@@ -161,11 +161,17 @@ eF = 1e-6
 # Rotation error cost weight
 eR = 1e-3
 
+# Degree of Taylor series approximation for matrix exponential
+e_terms = 8
+
+# Degree of Taylor series approximation for matrix logarithm
+l_terms = 8
+
 # Minimum total time
-tMin = 0.5
+tMin = 1.0
 
 # Maximum total time
-tMax = 1.5
+tMax = 2.25
 
 # Steps per contact phase
 step_list = [30, 30, 30]
@@ -189,9 +195,9 @@ Omega0 = np.zeros((3, 1))
 DOmega0 = np.zeros((3, 1))
 
 # Final States
-p_bodyf = np.array([0.4, 0.3, 0.25])
+p_bodyf = np.array([0.4, 0.3, 0.3])
 Rf = rp.from_euler('xyz', [0, 0, 45], True).as_matrix()
-tmp2 = [0.194, 0.1479, -0.25]
+tmp2 = [0.194, 0.1479, -0.3]
 p_feetf = np.array([p_bodyf + np.matmul(Rf, leg_mask(tmp2, 1)),
                     p_bodyf + np.matmul(Rf, leg_mask(tmp2, 2)),
                     p_bodyf + np.matmul(Rf, leg_mask(tmp2, 3)),
@@ -233,9 +239,9 @@ Omega_bounds = np.array([[-pi, pi],
                          [-pi, pi]])
 
 # Time derivative angular velocity bounds to make the problem more solvable
-DOmega_bounds = np.array([[-10, 10],
-                          [-10, 10],
-                          [-10, 10]])
+DOmega_bounds = np.array([[-20, 20],
+                          [-20, 20],
+                          [-20, 20]])
 
 # Mass of the SRB
 mass = 2.50000279
@@ -299,7 +305,7 @@ for k in range(cons.num_steps):
     if k == 0:
         R = horzcat(R, R_k)
     else:
-        R_k = mtimes(R_k, approximate_exp_a(skew(Omega_k * dt), 4))
+        R_k = mtimes(R_k, approximate_exp_a(skew(Omega_k * dt), e_terms))
         R = horzcat(R, R_k)
 
     if cons.contact_list[cons.get_current_phase(k)][0]:
@@ -313,7 +319,7 @@ for k in range(cons.num_steps):
 
 # Reference Trajectory
 slerp = Slerp([0, cons.num_steps], rp.concatenate([rp.from_matrix(R0), rp.from_matrix(Rf)]))
-R_ref = slerp(np.linspace(0, cons.num_steps, cons.num_steps))
+R_ref = slerp(np.linspace(0, cons.num_steps, cons.num_steps)).as_matrix()
 
 J = 0
 for k in range(cons.num_steps):
@@ -335,7 +341,7 @@ for k in range(cons.num_steps):
 
     # Rotation matrix of the body frame (3x3)
     R_k = R[:, 3 * k: 3 * (k + 1)]
-    R_ref_k = R_ref[k].as_matrix()
+    R_ref_k = R_ref[k]
 
     if k != 0:
         # Add dummy constraints
@@ -442,7 +448,7 @@ for k in range(cons.num_steps):
                                                 [0], [r])
 
     # Objective Function
-    e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), 4))
+    e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), l_terms))
     # J = J + (eOmega * mtimes(transpose(Omega_k), Omega_k)) + \
     #         (eF * mtimes(transpose(grf), grf)) + \
     #         (eR * mtimes(transpose(e_R_k), e_R_k))
@@ -459,59 +465,57 @@ x0 = constraints.w0
 nlp = {'x': x, 'f': J, 'g': constraints.g}
 
 # Solver options
-opts = {}
-# opts["verbose"] = True
-opts["ipopt"] = {"max_iter": 1000,
-                 "fixed_variable_treatment": "make_constraint",
-                 # # "nlp_scaling_method": "gradient-based",
-                 # "nlp_scaling_max_gradient": 1,
-                 # "nlp_scaling_min_value": 1e-16,
-                 # # "bound_mult_init_method": "constant",
-                 # "mu_strategy": "adaptive",
-                 # # "mu_oracle": "quality-function",
-                 # # "fixed_mu_oracle": "average_compl",
-                 # "adaptive_mu_globalization": "kkt-error",
-                 # "corrector_type": "affine",
-                 # "max_soc": 0,
-                 # "accept_every_trial_step": "yes",
-                 # "linear_system_scaling": "none",
-                 # # "neg_curv_test_tol": 0,
-                 # "neg_curv_test_reg": "yes",
-                 # "max_refinement_steps": 0,
-                 # "min_refinement_steps": 0,
-                 # # "linear_solver": "ma86",
-                 # # "ma86_order": "auto",
-                 # # "ma86_scaling": "mc64",
-                 # # "ma86_small": 1e-10,
-                 # # "ma86_static": 1,
-                 # # "recalc_y": "yes",
-                 "hessian_approximation": "limited-memory",
-                 "mumps_mem_percent": 10000,
-                 "print_level": 5}
-
-# warm_start_init_point yes
-# warm_start_bound_push 1e-9
-# warm_start_bound_frac 1e-9
-# warm_start_slack_bound_frac 1e-9
-# warm_start_slack_bound_push 1e-9
-# warm_start_mult_bound_push 1e-9
+opts = {"expand": True, "ipopt": {"max_iter": 1000,
+                                  "fixed_variable_treatment": "make_constraint",
+                                  "hessian_approximation": "limited-memory",
+                                  "mumps_mem_percent": 10000,
+                                  "print_level": 5}}
 
 # Allocate a solver
 solver = nlpsol("solver", "ipopt", nlp, opts)
 
 # Solve the NLP
 sol = solver(x0=x0, lbg=constraints.lbg, ubg=constraints.ubg, lbx=lbx, ubx=ubx)
+# sol_x = sol["x"]
+#
+# # Now that we are in the region of feasibility, optimize the objective
+#
+# # Initialize an NLP solver
+# nlp = {'x': x, 'f': J, 'g': constraints.g}
+#
+# # Solver options
+# opts = {"expand": True, "ipopt": {"max_iter": 1000,
+#                                   "fixed_variable_treatment": "make_constraint",
+#                                   "hessian_approximation": "limited-memory",
+#                                   "warm_start_init_point": "yes",
+#                                   "warm_start_bound_push": 1e-9,
+#                                   "warm_start_bound_frac": 1e-9,
+#                                   "warm_start_slack_bound_frac": 1e-9,
+#                                   "warm_start_slack_bound_push": 1e-9,
+#                                   "warm_start_mult_bound_push": 1e-9,
+#                                   "mu_strategy": "monotone",
+#                                   "mu_init": 0.0001,
+#                                   "nlp_scaling_method": "none",
+#                                   "mumps_mem_percent": 10000,
+#                                   "print_level": 5}}
+#
+# # Allocate a solver
+# solver = nlpsol("solver", "ipopt", nlp, opts)
+#
+# # Solve the NLP
+# sol = solver(x0=sol_x, lbg=constraints.lbg, ubg=constraints.ubg, lbx=lbx, ubx=ubx)
 sol_f = sol["f"]
 sol_x = sol["x"]
 sol_lam_x = sol["lam_x"]
 sol_lam_g = sol["lam_g"]
+
 solution = constraints.unpack_all(sol_x, True)
 T_opt = solution["T"]["opt_x"]
 p_body_opt = solution["p_body"]["opt_x"]
 dp_body_opt = solution["dp_body"]["opt_x"]
 Omega_opt = solution["Omega"]["opt_x"]
 DOmega_opt = solution["DOmega"]["opt_x"]
-R_opt = integrate_omega_history(cons, R0, Omega_opt, T_opt)
+R_opt = integrate_omega_history(cons, R0, Omega_opt, T_opt, e_terms)
 # R_opt = constraints.unpack_indices(sol_x, "R")
 F_0_opt = solution["F_0"]["opt_x"]
 F_1_opt = solution["F_1"]["opt_x"]
@@ -524,6 +528,7 @@ dp_body_opt = dp_body_opt.reshape(dp_body_opt.shape[0], -1)
 Omega_opt = Omega_opt.reshape(Omega_opt.shape[0], -1)
 DOmega_opt = DOmega_opt.reshape(DOmega_opt.shape[0], -1)
 R_opt = R_opt.reshape(cons.num_steps, 9)
+R_ref_pkg = np.array(R_ref).reshape(cons.num_steps, 9)
 F_0_opt = F_0_opt.reshape(F_0_opt.shape[0], -1)
 F_1_opt = F_1_opt.reshape(F_1_opt.shape[0], -1)
 F_2_opt = F_2_opt.reshape(F_2_opt.shape[0], -1)
@@ -539,25 +544,26 @@ print("dual solution (x) =", sol_lam_x)
 print("-----")
 print("dual solution (g) =", sol_lam_g)
 print("-----")
-np.savetxt('opt/sol_f.csv', sol_f, delimiter=',')
-np.savetxt('opt/sol_x', sol_x, delimiter=',')
-np.savetxt('opt/sol_lam_x.csv', sol_lam_x, delimiter=',')
-np.savetxt('opt/sol_lam_g.csv', sol_lam_g, delimiter=',')
+np.savetxt('solo_12/opt/sol_f.csv', sol_f, delimiter=',')
+np.savetxt('solo_12/opt/sol_x.csv', sol_x, delimiter=',')
+np.savetxt('solo_12/opt/sol_lam_x.csv', sol_lam_x, delimiter=',')
+np.savetxt('solo_12/opt/sol_lam_g.csv', sol_lam_g, delimiter=',')
 
-np.savetxt('opt/T_opt.csv', np.transpose(np.array(T_opt)), delimiter=',')
-np.savetxt('opt/p_body_opt.csv', p_body_opt, delimiter=',')
-np.savetxt('opt/dp_body_opt.csv', dp_body_opt, delimiter=',')
-np.savetxt('opt/Omega_opt.csv', Omega_opt, delimiter=',')
-np.savetxt('opt/DOmega_opt.csv', DOmega_opt, delimiter=',')
-np.savetxt('opt/R_opt.csv', R_opt, delimiter=',')
-np.savetxt('opt/F_0_opt.csv', F_0_opt, delimiter=',')
-np.savetxt('opt/F_1_opt.csv', F_1_opt, delimiter=',')
-np.savetxt('opt/F_2_opt.csv', F_2_opt, delimiter=',')
-np.savetxt('opt/F_3_opt.csv', F_3_opt, delimiter=',')
+np.savetxt('solo_12/opt/T_opt.csv', np.transpose(np.array(T_opt)), delimiter=',')
+np.savetxt('solo_12/opt/p_body_opt.csv', p_body_opt, delimiter=',')
+np.savetxt('solo_12/opt/dp_body_opt.csv', dp_body_opt, delimiter=',')
+np.savetxt('solo_12/opt/Omega_opt.csv', Omega_opt, delimiter=',')
+np.savetxt('solo_12/opt/DOmega_opt.csv', DOmega_opt, delimiter=',')
+np.savetxt('solo_12/opt/R_opt.csv', R_opt, delimiter=',')
+np.savetxt('solo_12/opt/R_ref.csv', R_ref_pkg, delimiter=',')
+np.savetxt('solo_12/opt/F_0_opt.csv', F_0_opt, delimiter=',')
+np.savetxt('solo_12/opt/F_1_opt.csv', F_1_opt, delimiter=',')
+np.savetxt('solo_12/opt/F_2_opt.csv', F_2_opt, delimiter=',')
+np.savetxt('solo_12/opt/F_3_opt.csv', F_3_opt, delimiter=',')
 
-np.savetxt('metadata/step_list.csv', np.array(step_list), delimiter=',')
-np.savetxt('metadata/contact_list.csv', np.array(contact_list), delimiter=',')
-np.savetxt('metadata/p_feet0.csv', p_feet0, delimiter=',')
-np.savetxt('metadata/p_feetf.csv', p_feetf, delimiter=',')
-np.savetxt('metadata/p_feet_bar.csv', np.array(p_feet_bar), delimiter=',')
-np.savetxt('metadata/r.csv', [r], delimiter=',')
+np.savetxt('solo_12/metadata/step_list.csv', np.array(step_list), delimiter=',')
+np.savetxt('solo_12/metadata/contact_list.csv', np.array(contact_list), delimiter=',')
+np.savetxt('solo_12/metadata/p_feet0.csv', p_feet0, delimiter=',')
+np.savetxt('solo_12/metadata/p_feetf.csv', p_feetf, delimiter=',')
+np.savetxt('solo_12/metadata/p_feet_bar.csv', np.array(p_feet_bar), delimiter=',')
+np.savetxt('solo_12/metadata/r.csv', [r], delimiter=',')
