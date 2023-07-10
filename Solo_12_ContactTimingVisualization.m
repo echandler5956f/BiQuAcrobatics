@@ -12,6 +12,7 @@ abadLinkLength = 0.01295;
 hipLinkLength = 0.160;
 kneeLinkY_offset = 0.04745;
 kneeLinkLength = 0.1675;
+mass = 2.50000279;
 bounds = [deg2rad(-90), deg2rad(90);
           deg2rad(-125), deg2rad(125);
           deg2rad(-175), deg2rad(175)];
@@ -64,22 +65,35 @@ dp_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt
 Omega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\Omega_opt"))), 3, 1, Nc);
 DOmega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\DOmega_opt"))), 3, 1, Nc);
 R_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\R_opt"))), 3, 3, Nc);
-R_tmp = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\R_ref"))), 3, 3, Nc);
 p_feet_opt = zeros(3, 4, Nc);
 
 f_idx = [0;0;0;0];
 for i = 1 : n_p
     f_idx = f_idx + transpose(contact_list(i, :));
 end
-F_0_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F_0_opt"))), 3, 1, Nch(f_idx(1)));
-F_1_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F_1_opt"))), 3, 1, Nch(f_idx(2)));
-F_2_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F_2_opt"))), 3, 1, Nch(f_idx(3)));
-F_3_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F_3_opt"))), 3, 1, Nch(f_idx(4)));
+F0_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F0_opt"))), 3, 1, Nch(f_idx(1)));
+F1_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F1_opt"))), 3, 1, Nch(f_idx(2)));
+F2_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F2_opt"))), 3, 1, Nch(f_idx(3)));
+F3_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F3_opt"))), 3, 1, Nch(f_idx(4)));
 T_opt = table2array(readtable(pwd + "\python\solo_12\opt\T_opt"));
+
+% p_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\p_body_guess"))), 3, 1, Nc);
+% dp_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\dp_body_guess"))), 3, 1, Nc);
+% Omega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\Omega_guess"))), 3, 1, Nc);
+% DOmega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\DOmega_guess"))), 3, 1, Nc);
+% R_tmp = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\R_guess"))), 3, 3, Nc);
+% F0_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F0_guess")), 3, 1, Nc);
+% F1_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F1_guess")), 3, 1, Nc);
+% F2_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F2_guess")), 3, 1, Nc);
+% F3_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F3_guess")), 3, 1, Nc);
+% T_guess = table2array(readtable(pwd + "\python\solo_12\initial_guess\T_guess"));
 
 F_opt = zeros(3, 4, Nc);
 R_ref = [];
 p_ref = [];
+
+p = p_body_opt(:,:,1);
+v = zeros(3,1);
 for k = 1 : Nc
     i = getCurrentPhase(k, Nch);
     R_opt(:,:,k) = transpose(R_opt(:,:,k));
@@ -88,31 +102,40 @@ for k = 1 : Nc
     p_ref = [p_ref; [2,0,0]];
     F_k = zeros(3, 4);
     if k < Nch(f_idx(1))
-        F_k(:,1) = F_0_opt(:,:,k);
+        F_k(:,1) = F0_opt(:,:,k);
         p_feet_opt(:,1,k) = p_feet0(:,1);
     else
         p_feet_opt(:,1,k) = p_feetf(:,1);
     end
     if k < Nch(f_idx(2))
-        F_k(:,2) = F_1_opt(:,:,k);
+        F_k(:,2) = F1_opt(:,:,k);
         p_feet_opt(:,2,k) = p_feet0(:,2);
     else
         p_feet_opt(:,2,k) = p_feetf(:,2);
     end
     if k < Nch(f_idx(3))
-        F_k(:,3) = F_2_opt(:,:,k);
+        F_k(:,3) = F2_opt(:,:,k);
         p_feet_opt(:,3,k) = p_feet0(:,3);
     else
         p_feet_opt(:,3,k) = p_feetf(:,3);
     end
     if k < Nch(f_idx(4))
-        F_k(:,4) = F_3_opt(:,:,k);
+        F_k(:,4) = F3_opt(:,:,k);
         p_feet_opt(:,4,k) = p_feet0(:,4);
     else
         p_feet_opt(:,4,k) = p_feetf(:,4);
     end
     F_opt(:,:,k) = F_k;
+    if k <= Nch(2)
+        v = v + (([sum(F_k(1,:));sum(F_k(2,:));sum(F_k(3,:))]/mass) - ...
+            [0;0;9.81]) * (T_opt(i)/step_list(i));
+        p = p + (v * (T_opt(i)/step_list(i)));
+    end
 end
+
+% disp(v)
+% disp(v/(T_opt(1) + T_opt(2)))
+% disp(p + v*T_opt(3) - [0;0;9.81/2]*T_opt(3)^2)
 
 % Test Body Bounds
 % close all;
@@ -132,30 +155,60 @@ end
 
 %% Visualization
 close all;
-robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
-qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
 
-qj = getJointAngles(kin, p_body_opt(:,:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
-qcj = [qc;qj];
-initVisualizer(robot, qcj);
 slowDown = 1;
 rates = {};
+t = zeros(Nc, 1);
+it = 1;
 for i = 1 : n_p
-    rates = {rates{:}, rateControl((step_list(i)/T_opt(i))/slowDown)};
-end
-% plotTransforms(p_ref, R_ref)
-plts = [];
-while true
-    for k = 1 : Nc
-        i = getCurrentPhase(k, Nch);
-        qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
-        qj = getJointAngles(kin, p_body_opt(:,:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
-        qcj = [qc; qj];
-        plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
-            R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,:,1),plts);
-        waitfor(rates{i});
+    dt = T_opt(i) / step_list(i);
+    rates = {rates{:}, rateControl(slowDown/dt)};
+    for k = 1 : step_list(i)
+        if it ~= 1
+            t(it, 1) = t(it-1, 1) + dt;
+        end
+        it = it + 1;
     end
 end
+
+F0_new = reshape(F0_opt, 3, length(F0_opt));
+F1_new = reshape(F1_opt, 3, length(F1_opt));
+F2_new = reshape(F2_opt, 3, length(F2_opt));
+F3_new = reshape(F3_opt, 3, length(F3_opt));
+
+tiledlayout(4, 1)
+nexttile
+plot(t(1:length(F0_new), 1), F0_new)
+nexttile
+plot(t(1:length(F1_new), 1), F1_new)
+legend('x', 'y', 'z')
+nexttile
+plot(t(1:length(F2_new), 1), F2_new)
+legend('x', 'y', 'z')
+nexttile
+plot(t(1:length(F3_new), 1), F3_new)
+legend('x', 'y', 'z')
+
+% robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
+% qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
+% 
+% qj = getJointAngles(kin, p_body_opt(:,:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
+% qcj = [qc;qj];
+% initVisualizer(robot, qcj);
+% 
+% % plotTransforms(p_ref, R_ref)
+% plts = [];
+% while true
+%     for k = 1 : Nc
+%         i = getCurrentPhase(k, Nch);
+%         qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
+%         qj = getJointAngles(kin, p_body_opt(:,:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
+%         qcj = [qc; qj];
+%         plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
+%             R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,:,1),plts);
+%         waitfor(rates{i});
+%     end
+% end
 
 function qj = getJointAngles(kin, p_body_k, R_k, p_feet_k, y0)
     T_wb = [transpose(R_k),-p_body_k; 
