@@ -98,8 +98,8 @@ class Contacts:
 
 
 class MotionProfile:
-    def __init__(self, motion_type, step_list, mass, inertia, g_accel, r, p_feet0,
-                 f_max, p_body0, dp_body0, Omega0, DOmega0, R0, p_bodyf, Rf):
+    def __init__(self, motion_type, step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
+                 p_bodyf, Rf, i_force_guess):
         self.motion_type = motion_type
         self.step_list = step_list
 
@@ -128,9 +128,10 @@ class MotionProfile:
         self.d_integrator = None
         self.rot_integrator = None
 
+        self.i_force_guess = i_force_guess
+
         self.generate_parameters(inertia)
-        self.generate_guesses(mass, g_accel, r, p_feet0, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
-                              p_bodyf, Rf)
+        self.generate_guesses(mass, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0, p_bodyf, Rf)
 
     def generate_parameters(self, inertia):
         # Defaults
@@ -148,7 +149,7 @@ class MotionProfile:
         beta = -0.1
 
         # Scaling parameter for initial trajectory guess
-        gamma = 0.405
+        gamma = 0.45
 
         # Minimum total time
         tMin = 1.0
@@ -201,6 +202,9 @@ class MotionProfile:
             case 'barrel_roll':
                 p_axis = 1
             case 'backflip':
+                t_imin = np.array([0.25, 0.25, 0.333])
+                t_imax = np.array([0.75, 0.5, 1.5])
+                t_guess = np.array([0.5, 0.333, 0.69])
                 p_axis = 0
             case _:
                 print('ERROR!!!!!!!!!!!!! No such acrobatic preset exists.')
@@ -236,7 +240,6 @@ class MotionProfile:
         x2_a = SX.sym('x2_a_ref', 3, 1)
         u_a = SX.sym('u1_a_ref', 3, 1)
         xdot1_a = mtimes(x1_a, skew(x2_a))
-        # xdot2_a = mtimes(np.linalg.inv(inertia), (mtimes(transpose(x1_a), u_a) - cross(x2_a, mtimes(inertia, x2_a))))
         xdot2_a = u_a
         U_a = SX.sym('U_a', 3, 1)
         X0_a1 = SX.sym('X0_a1', 3, 3)
@@ -259,10 +262,10 @@ class MotionProfile:
             X_a1 = X_a1 + DT / 6 * (k1_a1 + 2 * k2_a1 + 2 * k3_a1 + k4_a1)
             X_a2 = X_a2 + DT / 6 * (k1_a2 + 2 * k2_a2 + 2 * k3_a2 + k4_a2)
         self.d_integrator = Function('d_integrator', [X0_l, U_l, DT], [X_l], ['x0', 'u', 'dt'], ['xf'])
-        self.rot_integrator = Function('rot_integrator', [X0_a1, X0_a2, U_a, DT], [X_a1, X_a2], ['x01', 'x02', 'u', 'dt'], ['xf1', 'xf2'])
+        self.rot_integrator = Function('rot_integrator', [X0_a1, X0_a2, U_a, DT], [X_a1, X_a2],
+                                       ['x01', 'x02', 'u', 'dt'], ['xf1', 'xf2'])
 
-    def generate_guesses(self, mass, g_accel, r, p_feet0, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
-                         p_bodyf, Rf):
+    def generate_guesses(self, mass, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0, p_bodyf, Rf):
         # Initialize the initial guess matrices
         self.p_guess = np.hstack((p_body0[:, None], np.zeros((3, self.cons.num_steps - 2)), p_bodyf[:, None]))
         self.dp_guess = np.hstack((dp_body0[:, None], np.zeros((3, self.cons.num_steps - 1))))
@@ -271,7 +274,7 @@ class MotionProfile:
         self.Omega_guess = np.hstack((Omega0[:, None], np.zeros((3, self.cons.num_steps - 1))))
         self.DOmega_guess = np.hstack((DOmega0[:, None], np.zeros((3, self.cons.num_steps - 1))))
 
-        # # Reference trajectory (used for non-principle axis)
+        # Reference trajectory (used for non-principle axis)
         slerp = Slerp([0, self.cons.num_steps], rp.concatenate([rp.from_matrix(R0), rp.from_matrix(Rf)]))
         self.R_ref = slerp(np.linspace(0, self.cons.num_steps, self.cons.num_steps)).as_matrix()
 
@@ -318,9 +321,14 @@ class MotionProfile:
         self.t_guess[it] = t_fl
         avg_lin_acc = np.array(2 * (p_bodyf[0:2] - self.p_guess[0:2, 0]) / (np.power(t_lo, 2) + (2 * t_fl * t_lo)))
         if self.p_axis != 1:
-            e0 = rp.from_matrix(R0).as_euler('xyz')
-            ef = rp.from_matrix(Rf).as_euler('xyz')
+            e0 = rp.from_matrix(R0).as_euler('zxy')
+            ef = rp.from_matrix(Rf).as_euler('zxy')
+            e0 = np.array([e0[1], e0[0], e0[2]])
+            # ef = np.array([ef[1], ef[0], ef[2]])
+            e0 = np.array([0, 0, 0])
+            ef = np.array([0, -2*pi, 0])
         else:
+            print('Not ready for this yet')
             e0 = np.zeros(3, 1)
             ef = np.zeros(3, 1)
 
@@ -355,28 +363,31 @@ class MotionProfile:
 
             clegs = self.cons.contact_list[i][0] + self.cons.contact_list[i][1] + \
                     self.cons.contact_list[i][2] + self.cons.contact_list[i][3]
-            # tau = np.zeros((3, 1))
             if clegs > 0:
-                F_0_k = (self.cons.contact_list[i][0] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
-                F_1_k = (self.cons.contact_list[i][1] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
-                F_2_k = (self.cons.contact_list[i][2] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
-                F_3_k = (self.cons.contact_list[i][3] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                if self.i_force_guess:
+                    F_0_k = (self.cons.contact_list[i][0] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                    F_1_k = (self.cons.contact_list[i][1] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                    F_2_k = (self.cons.contact_list[i][2] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                    F_3_k = (self.cons.contact_list[i][3] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                else:
+                    # for some reason this initial guess works extremely well for diagonal jumping,
+                    # even though the force profile is basically identical
+                    F_0_k = [0, 0, g_accel[2] * mass / clegs]
+                    F_1_k = [0, 0, g_accel[2] * mass / clegs]
+                    F_2_k = [0, 0, g_accel[2] * mass / clegs]
+                    F_3_k = [0, 0, g_accel[2] * mass / clegs]
                 self.f_ref[:, 0, k] = F_0_k
                 self.f_ref[:, 1, k] = F_1_k
                 self.f_ref[:, 2, k] = F_2_k
                 self.f_ref[:, 3, k] = F_3_k
-                # tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k), F_0_k*10) + \
-                #             cross(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k), F_1_k*10) + \
-                #             cross(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k), F_2_k*10) + \
-                #             cross(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k), F_3_k*10)
             Fa1 = self.rot_integrator(x01=R_k, x02=Omega_k, u=DOmega, dt=dt / self.M)
             self.R_ref[k + 1] = Fa1['xf1']
             self.Omega_guess[:, k + 1] = np.reshape([Fa1['xf2']], (3,))
 
-        # print(self.p_guess[0])
+        # print(self.p_guess)
         # print(self.dp_guess)
         # print(self.acc_ref[0, :])
-        # print(self.f_ref[:, 2, :])
+        # print(self.f_ref[:, 0, :])
 
 
 def approximate_exp_a(a, deg):
@@ -461,7 +472,7 @@ mu = 0.7
 
 # Maximum ground reaction force in the Z direction
 # (friction constraints imply the force in the X and Y direction have to be less than this)
-f_max = 20
+f_max = 50
 
 # Degree of Taylor series approximation for matrix exponential
 e_terms = 8
@@ -470,18 +481,18 @@ e_terms = 8
 l_terms = 8
 
 # Steps per contact phase
-step_list = [30, 30]
+step_list = [30, 30, 30]
 
 # Initial States
-p_body0 = np.array([0, 0, 0.15])
+p_body0 = np.array([0, 0, 0.3])
 dp_body0 = np.array([0, 0, 0])
 Omega0 = np.array([0, 0, 0])
 DOmega0 = np.array([0, 0, 0])
-R0 = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
+R0 = rp.from_euler('zxy', [-180, 0, 0], True).as_matrix()
 
 # Final States
-p_bodyf = np.array([0.0, 0.0, 0.25])
-Rf = rp.from_euler('xyz', [0, 0, 90], True).as_matrix()
+p_bodyf = np.array([0.4, 0.0, 0.3])
+Rf = rp.from_euler('zxy', [-180, 0, 0], True).as_matrix()
 
 # Place the feet below the hip
 tmp = np.array([0.194, 0.1479])
@@ -490,35 +501,39 @@ p_feetf = foot_positions(p_bodyf, Rf, tmp)
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
+# pbar = [0.194, 0.1479, -0.16]
 pbar = [0.194, 0.1479, -0.16]
 p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), leg_mask(pbar, 4)]).transpose()
 
 # Roughly what type of action do you want the robot to take?
 # This only influences the initial guess and some tuning parameters to make the program converge better
 # ['jump', 'spinning_jump', 'diagonal_jump', 'barrel_roll', 'backflip']
-mp = MotionProfile('spinning_jump', step_list, mass, inertia, g_accel, r, p_feet0, f_max, p_body0, dp_body0, Omega0,
-                   DOmega0, R0, p_bodyf, Rf)
+mp = MotionProfile('backflip', step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
+                   p_bodyf, Rf, True)
+# print(mp.p_guess)
+# print(mp.f_ref)
+# print(mp.t_guess)
 
 # GRF limits
 f_bounds = np.array([[-inf, inf],
-                     [-inf, inf],
+                     [-0.1, 0.1],
                      [0, f_max]])
 
 # COM bounding constraint. Ideally you would set this to some section of a
 # tube each timestep within you want the trajectory to lie
-p_body_bounds = np.array([[-inf, inf],
-                          [-inf, inf],
-                          [0, inf]])
+p_body_bounds = np.array([[-1.0, 0.25],
+                          [-0.1, 0.1],
+                          [0.05, inf]])
 
 # Velocity bounds to make the problem more solvable
 dp_body_bounds = np.array([[-inf, inf],
-                           [-inf, inf],
+                           [-0.1, 0.1],
                            [-inf, inf]])
 
 # Angular velocity bounds to make the problem more solvable
 Omega_bounds = np.array([[-inf, inf],
                          [-inf, inf],
-                         [-inf, inf]])
+                         [-0.1, 0.1]])
 
 # Time derivative angular velocity bounds to make the problem more solvable
 DOmega_bounds = np.array([[-inf, inf],
@@ -614,21 +629,22 @@ for k in range(mp.cons.num_steps):
     R_ref_k = mp.R_ref[k]
 
     if k != 0:
-        constraints.add_design_constraints(dp_body_k, dp_body_bounds[:, 0], dp_body_bounds[:, 1], dp_body0,
+        constraints.add_design_constraints(dp_body_k, dp_body_bounds[:, 0], dp_body_bounds[:, 1], mp.dp_guess[:, k],
                                            'dp_body')
-        constraints.add_design_constraints(Omega_k, Omega_bounds[:, 0], Omega_bounds[:, 1], Omega0, 'Omega')
+        constraints.add_design_constraints(Omega_k, Omega_bounds[:, 0], Omega_bounds[:, 1], mp.Omega_guess[:, k],
+                                           'Omega')
         constraints.add_design_constraints(DOmega_k, DOmega_bounds[:, 0], DOmega_bounds[:, 1],
-                                           np.zeros((3, 1)), 'DOmega')
+                                           mp.DOmega_guess[:, k], 'DOmega')
 
         if k != mp.cons.num_steps - 1:
             # Add body bounding box constraints
             if i == mp.cons.num_cons - 1:
                 p_interp = (k - mp.cons.cum_steps[i - 1]) * (p_bodyf - p_body0) / mp.cons.step_list[i]
                 constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
-                                                   p_interp, 'p_body')
+                                                   mp.p_guess[:, k], 'p_body')
             else:
                 constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
-                                                   p_body0, 'p_body')
+                                                   mp.p_guess[:, k], 'p_body')
 
     # Add friction cone, GRF, and foot position constraints to each leg
     grf = np.zeros((3, 1))
@@ -639,59 +655,43 @@ for k in range(mp.cons.num_steps):
         # GRF on each foot (3x1)
         F_0_k = F_0[3 * k: 3 * (k + 1)]
         grf = grf + F_0_k
-        # tau = tau + cross((p_feet0[:, 0] - p_body_k), F_0_k)
         tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k), F_0_k)
         constraints.add_general_constraints(fabs(F_0_k[0] / F_0_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_0_k[1] / F_0_k[2]), [0], [mu])
-        # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feet0[:, 0] - p_body_k)) - p_feet_bar[:, 0]),
-        #                                     [0], [r])
-        constraints.add_general_constraints(norm_2(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 0]),
-                                            [0], [r])
-        # constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 0, k], 'F_0')
-        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
-                                           'F_0')
+        constraints.add_general_constraints(
+            norm_2(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 0]),
+            [0], [r])
+        constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 0, k], 'F_0')
     if mp.cons.contact_list[i][1]:
         F_1_k = F_1[3 * k: 3 * (k + 1)]
         grf = grf + F_1_k
-        # tau = tau + cross((p_feet0[:, 1] - p_body_k), F_1_k)
         tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k), F_1_k)
         constraints.add_general_constraints(fabs(F_1_k[0] / F_1_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_1_k[1] / F_1_k[2]), [0], [mu])
-        # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feet0[:, 1] - p_body_k)) - p_feet_bar[:, 1]),
-        #                                     [0], [r])
-        constraints.add_general_constraints(norm_2(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 1]),
-                                            [0], [r])
-        # constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 1, k], 'F_1')
-        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
-                                           'F_1')
+        constraints.add_general_constraints(
+            norm_2(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 1]),
+            [0], [r])
+        constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 1, k], 'F_1')
     if mp.cons.contact_list[i][2]:
         F_2_k = F_2[3 * k: 3 * (k + 1)]
         grf = grf + F_2_k
-        # tau = tau + cross((p_feet0[:, 2] - p_body_k), F_2_k)
         tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k), F_2_k)
         constraints.add_general_constraints(fabs(F_2_k[0] / F_2_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_2_k[1] / F_2_k[2]), [0], [mu])
-        # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feet0[:, 2] - p_body_k)) - p_feet_bar[:, 2]),
-        #                                     [0], [r])
-        constraints.add_general_constraints(norm_2(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 2]),
-                                            [0], [r])
-        # constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 2, k], 'F_2')
-        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
-                                           'F_2')
+        constraints.add_general_constraints(
+            norm_2(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 2]),
+            [0], [r])
+        constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 2, k], 'F_2')
     if mp.cons.contact_list[i][3]:
         F_3_k = F_3[3 * k: 3 * (k + 1)]
         grf = grf + F_3_k
-        # tau = tau + cross((p_feet0[:, 3] - p_body_k), F_3_k)
         tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k), F_3_k)
         constraints.add_general_constraints(fabs(F_3_k[0] / F_3_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_3_k[1] / F_3_k[2]), [0], [mu])
-        # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feet0[:, 3] - p_body_k)) - p_feet_bar[:, 3]),
-        #                                     [0], [r])
-        constraints.add_general_constraints(norm_2(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 3]),
-                                            [0], [r])
-        # constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 3, k], 'F_3')
-        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
-                                           'F_3')
+        constraints.add_general_constraints(
+            norm_2(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 3]),
+            [0], [r])
+        constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 3, k], 'F_3')
 
     # Discrete dynamics
     if k < mp.cons.num_steps - 1:
@@ -704,8 +704,6 @@ for k in range(mp.cons.num_steps):
         p_body_next = p_body_k + (dp_body_k * dt) + ((1 / 2) * ddp_body * power(dt, 2))
         dp_body_next = dp_body_k + ddp_body * dt
         Omega_next = Omega_k + DOmega_k * dt
-        # DOmega_next = mtimes(np.linalg.inv(inertia),
-        #                      (mtimes(transpose(R_k), tau) - cross(Omega_k, mtimes(inertia, Omega_k))))
         DOmega_next = mtimes(np.linalg.inv(inertia),
                              (tau - cross(Omega_k, mtimes(inertia, Omega_k))))
 
@@ -723,18 +721,15 @@ for k in range(mp.cons.num_steps):
 
     if k == mp.cons.num_steps - 1:
         constraints.add_design_constraints(p_body_k, p_bodyf, p_bodyf, p_bodyf, 'p_body')
-        constraints.add_general_constraints(reshape(transpose(R_k), (9, 1)), np.reshape(Rf, (9, 1)), np.reshape(Rf, (9, 1)))
-        # print(Rf)
-        # print(R_k)
+        constraints.add_general_constraints(reshape(transpose(R_k), (9, 1)), np.reshape(Rf, (9, 1)),
+                                            np.reshape(Rf, (9, 1)))
         for leg in range(4):
-            # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feetf[:, leg] - p_body_k)) - p_feet_bar[:, leg]),
-            #                                     [0], [r])
-            constraints.add_general_constraints(norm_2(mtimes(transpose(Rf), p_feetf[:, leg]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, leg]),
-                                                [0], [r])
+            constraints.add_general_constraints(
+                norm_2(mtimes(transpose(Rf), p_feetf[:, leg]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, leg]),
+                [0], [r])
 
     # Objective Function
     e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), l_terms))
-    # e_R_k = (1/2) * inv_skew(mtimes(transpose(R_ref_k), R_k) - mtimes(transpose(R_k), R_ref_k))
     J = J + (mp.eOmega * mtimes(transpose(Omega_k), Omega_k))
     J = J + (mp.eF * mtimes(transpose(grf), grf))
     J = J + (mp.eR * mtimes(transpose(e_R_k), e_R_k))
@@ -766,7 +761,7 @@ sol_x = sol["x"]
 sol_lam_x = sol["lam_x"]
 sol_lam_g = sol["lam_g"]
 
-solution = constraints.unpack_all(sol_x, False)
+solution = constraints.unpack_all(sol_x, True)
 T_opt = solution["T"]["opt_x"]
 p_body_opt = solution["p_body"]["opt_x"]
 dp_body_opt = solution["dp_body"]["opt_x"]
@@ -783,18 +778,10 @@ dp_body_opt = dp_body_opt.reshape(dp_body_opt.shape[0], -1)
 Omega_opt = Omega_opt.reshape(Omega_opt.shape[0], -1)
 DOmega_opt = DOmega_opt.reshape(DOmega_opt.shape[0], -1)
 R_opt = integrate_omega_history(mp.cons, R0, Omega_opt, T_opt, e_terms)
-# print('--------------------')
-# print(R_opt[mp.cons.num_steps - 1, :, :])
-# print('--------------------')
-# print(Rf)
-# print('--------------------')
-# erk1 = inv_skew(approximate_log_a(mtimes(transpose(Rf), R_opt[mp.cons.num_steps - 1, :, :]), l_terms))
-# print(mtimes(transpose(erk1), erk1))
 
 R_opt = R_opt.reshape(mp.cons.num_steps, 9)
 R_guess = np.array(mp.R_ref).reshape(mp.cons.num_steps, 9)
-# print(R_opt[mp.cons.num_steps - 1, :])
-# print(R_guess[mp.cons.num_steps - 1, :])
+
 F_0_opt = F_0_opt.reshape(F_0_opt.shape[0], -1)
 F_1_opt = F_1_opt.reshape(F_1_opt.shape[0], -1)
 F_2_opt = F_2_opt.reshape(F_2_opt.shape[0], -1)

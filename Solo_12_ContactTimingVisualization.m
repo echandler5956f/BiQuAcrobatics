@@ -3,6 +3,7 @@
 clc; close all
 
 animate = true;
+visualizeReference = false;
 
 % Kinematics
 
@@ -91,6 +92,7 @@ F3_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initia
 T_guess = table2array(readtable(pwd + "\python\solo_12\initial_guess\T_guess"));
 
 F_opt = zeros(3, 4, Nc);
+F_ref = zeros(3, 4, Nc);
 R_qref = [];
 p_qref = [];
 eul_opt_xyz = zeros(3, Nc);
@@ -103,13 +105,17 @@ for k = 1 : Nc
     R_opt(:,:,k) = transpose(R_opt(:,:,k));
     R_ref(:,:,k) = transpose(R_ref(:,:,k));
     R_qref = [R_qref; rotm2quat(transpose(R_ref(:,:,k)))];
-    % p_qref = [p_qref; transpose(p_body_opt(:,k))];
-    p_qref = [p_qref; [2,0,0]];
-    eul_opt_xyz(:, k) = transpose(rad2deg(rotm2eul(R_opt(:,:,k), 'XYZ')));
-    eul_ref_xyz(:, k) = transpose(rad2deg(rotm2eul(R_ref(:,:,k), 'XYZ')));
+    p_qref = [p_qref; transpose(p_body_opt(:,k))];
+    % p_qref = [p_qref; [2,0,0]];
+    eul_opt_xyz(:, k) = transpose(rad2deg(rotm2eul(R_opt(:,:,k), 'ZXY')));
+    eul_ref_xyz(:, k) = transpose(rad2deg(rotm2eul(R_ref(:,:,k), 'ZXY')));
+    eul_opt_xyz(:, k) = [eul_opt_xyz(2, k); eul_opt_xyz(3, k); eul_opt_xyz(1, k)];
+    eul_ref_xyz(:, k) = [eul_ref_xyz(2, k); eul_ref_xyz(3, k); eul_ref_xyz(1, k)];
     F_k = zeros(3, 4);
+    F_k_ref = zeros(3, 4);
     if k < Nch(f_idx(1))
         F_k(:,1) = F0_opt(:,k);
+        F_k_ref(:,1) = F0_guess(:,k);
         p_feet_opt(:,1,k) = p_feet0(:,1);
     else
         F0_opt(:,k) = NaN(3,1);
@@ -117,6 +123,7 @@ for k = 1 : Nc
     end
     if k < Nch(f_idx(2))
         F_k(:,2) = F1_opt(:,k);
+        F_k_ref(:,2) = F1_guess(:,k);
         p_feet_opt(:,2,k) = p_feet0(:,2);
     else
         F1_opt(:,k) = NaN(3,1);
@@ -124,6 +131,7 @@ for k = 1 : Nc
     end
     if k < Nch(f_idx(3))
         F_k(:,3) = F2_opt(:,k);
+        F_k_ref(:,3) = F2_guess(:,k);
         p_feet_opt(:,3,k) = p_feet0(:,3);
     else
         F2_opt(:,k) = NaN(3,1);
@@ -131,6 +139,7 @@ for k = 1 : Nc
     end
     if k < Nch(f_idx(4))
         F_k(:,4) = F3_opt(:,k);
+        F_k_ref(:,4) = F3_guess(:,k);
         p_feet_opt(:,4,k) = p_feet0(:,4);
     else
         F3_opt(:,k) = NaN(3,1);
@@ -184,23 +193,45 @@ end
 
 if animate == true
     robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
-    qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,1)]; % Pose
-    
-    qj = getJointAngles(kin, p_body_opt(:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
-    qcj = [qc;qj];
-    initVisualizer(robot, qcj);
-    
-    % plotTransforms(p_qref, R_qref)
-    plts = [];
-    while true
-        for k = 1 : Nc
-            i = getCurrentPhase(k, Nch);
-            qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,k)];
-            qj = getJointAngles(kin, p_body_opt(:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
-            qcj = [qc; qj];
-            plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
-                R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts);
-            waitfor(rates{i});
+    if ~visualizeReference
+        qc = [p_body_opt(:,1); transpose(rotm2eul(R_opt(:,:,1), 'ZXY'))]; % Pose
+        
+        qj = getJointAngles(kin, p_body_opt(:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
+        qcj = [qc;qj];
+        initVisualizer(robot, qcj);
+        
+        plotTransforms(p_qref, R_qref)
+        plts = [];
+        while true
+            for k = 1 : Nc
+                i = getCurrentPhase(k, Nch);
+                qc = [p_body_opt(:,k); transpose(rotm2eul(R_opt(:,:,k), 'ZXY'))];
+                qj = getJointAngles(kin, p_body_opt(:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
+                qcj = [qc; qj];
+                plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
+                    R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts);
+                waitfor(rates{i});
+            end
+        end
+    else
+        qc = [p_body_guess(:,1); transpose(rotm2eul(R_ref(:,:,1), 'ZXY'))]; % Pose
+        
+        qj = getJointAngles(kin, p_body_guess(:,1), R_ref(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
+        qcj = [qc;qj];
+        initVisualizer(robot, qcj);
+        
+        plotTransforms(p_qref, R_qref)
+        plts = [];
+        while true
+            for k = 1 : Nc
+                i = getCurrentPhase(k, Nch);
+                qc = [p_body_guess(:,k); transpose(rotm2eul(R_ref(:,:,k), 'ZXY'))];
+                qj = getJointAngles(kin, p_body_guess(:,k), R_ref(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
+                qcj = [qc; qj];
+                plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
+                    R_ref(:,:,k),F_ref(:,:,k),p_body_guess(:,1),plts);
+                waitfor(rates{i});
+            end
         end
     end
 else
@@ -337,7 +368,7 @@ end
 
 function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     p_body0, old_plts)
-    p_body = q(4:6);
+    p_body = q(1:3);
     q = [q(1:6);
         -q(7);q(8:9);
         q(10:12);
@@ -364,7 +395,7 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
             p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
             "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
             "ShowArrowHead","on")];
-        tr = R*(p_body + p_feet_bar(:,leg));
+        tr = p_body + R*p_feet_bar(:,leg);
         [x,y,z] = sphere;
         x = x*r + tr(1);
         y = y*r + tr(2);
