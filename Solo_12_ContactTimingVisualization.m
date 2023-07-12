@@ -2,7 +2,7 @@
 
 clc; close all
 
-animate = true;
+animate = false;
 
 % Kinematics
 
@@ -16,7 +16,7 @@ kneeLinkY_offset = 0.04745;
 kneeLinkLength = 0.1675;
 mass = 2.50000279;
 bounds = [deg2rad(-90), deg2rad(90);
-          deg2rad(-125), deg2rad(125);
+          deg2rad(-175), deg2rad(175);
           deg2rad(-175), deg2rad(175)];
 PM = utils.tdh(pi/2, 0, bodyHalfWidth, -pi/2) * ...
      utils.tdh(0, -bodyHalfLength, 0, 0);
@@ -62,69 +62,78 @@ n_p = size(step_list, 1);
 Nch = cumsum(step_list);
 Nc = sum(step_list);
 
-p_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\p_body_opt"))), 3, 1, Nc);
-dp_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\dp_body_opt"))), 3, 1, Nc);
-Omega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\Omega_opt"))), 3, 1, Nc);
-DOmega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\DOmega_opt"))), 3, 1, Nc);
+p_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\p_body_opt"))), 3, Nc);
+dp_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\dp_body_opt"))), 3, Nc);
+Omega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\Omega_opt"))), 3, Nc);
+DOmega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\DOmega_opt"))), 3, Nc);
 R_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\R_opt"))), 3, 3, Nc);
-R_tmp = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\R_guess"))), 3, 3, Nc);
+R_ref = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\R_guess"))), 3, 3, Nc);
 p_feet_opt = zeros(3, 4, Nc);
 
 f_idx = [0;0;0;0];
 for i = 1 : n_p
     f_idx = f_idx + transpose(contact_list(i, :));
 end
-F0_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F0_opt"))), 3, 1, Nch(f_idx(1)));
-F1_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F1_opt"))), 3, 1, Nch(f_idx(2)));
-F2_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F2_opt"))), 3, 1, Nch(f_idx(3)));
-F3_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F3_opt"))), 3, 1, Nch(f_idx(4)));
+F0_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F0_opt"))), 3, Nc);
+F1_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F1_opt"))), 3, Nc);
+F2_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F2_opt"))), 3, Nc);
+F3_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F3_opt"))), 3, Nc);
 T_opt = table2array(readtable(pwd + "\python\solo_12\opt\T_opt"));
 
-% p_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\p_body_guess"))), 3, 1, Nc);
-% dp_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\dp_body_guess"))), 3, 1, Nc);
-% Omega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\Omega_guess"))), 3, 1, Nc);
-% DOmega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\DOmega_guess"))), 3, 1, Nc);
-% F0_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F0_guess")), 3, 1, Nc);
-% F1_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F1_guess")), 3, 1, Nc);
-% F2_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F2_guess")), 3, 1, Nc);
-% F3_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F3_guess")), 3, 1, Nc);
-% T_guess = table2array(readtable(pwd + "\python\solo_12\initial_guess\T_guess"));
+p_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\p_body_guess"))), 3, Nc);
+dp_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\dp_body_guess"))), 3, Nc);
+Omega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\Omega_guess"))), 3, Nc);
+DOmega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\DOmega_guess"))), 3, Nc);
+F0_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\F0_guess"))), 3, Nc);
+F1_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\F1_guess"))), 3, Nc);
+F2_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\F2_guess"))), 3, Nc);
+F3_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\F3_guess"))), 3, Nc);
+T_guess = table2array(readtable(pwd + "\python\solo_12\initial_guess\T_guess"));
 
 F_opt = zeros(3, 4, Nc);
-R_ref = [];
-p_ref = [];
+R_qref = [];
+p_qref = [];
+eul_opt_xyz = zeros(3, Nc);
+eul_ref_xyz = zeros(3, Nc);
 
 p = p_body_opt(:,:,1);
 v = zeros(3,1);
 for k = 1 : Nc
     i = getCurrentPhase(k, Nch);
     R_opt(:,:,k) = transpose(R_opt(:,:,k));
-    R_ref = [R_ref; rotm2quat(transpose(R_tmp(:,:,k)))];
-    % p_ref = [p_ref; transpose(p_body_opt(:,:,k))];
-    p_ref = [p_ref; [2,0,0]];
+    R_ref(:,:,k) = transpose(R_ref(:,:,k));
+    R_qref = [R_qref; rotm2quat(transpose(R_ref(:,:,k)))];
+    % p_qref = [p_qref; transpose(p_body_opt(:,k))];
+    p_qref = [p_qref; [2,0,0]];
+    eul_opt_xyz(:, k) = transpose(rad2deg(rotm2eul(R_opt(:,:,k), 'XYZ')));
+    eul_ref_xyz(:, k) = transpose(rad2deg(rotm2eul(R_ref(:,:,k), 'XYZ')));
     F_k = zeros(3, 4);
     if k < Nch(f_idx(1))
-        F_k(:,1) = F0_opt(:,:,k);
+        F_k(:,1) = F0_opt(:,k);
         p_feet_opt(:,1,k) = p_feet0(:,1);
     else
+        F0_opt(:,k) = NaN(3,1);
         p_feet_opt(:,1,k) = p_feetf(:,1);
     end
     if k < Nch(f_idx(2))
-        F_k(:,2) = F1_opt(:,:,k);
+        F_k(:,2) = F1_opt(:,k);
         p_feet_opt(:,2,k) = p_feet0(:,2);
     else
+        F1_opt(:,k) = NaN(3,1);
         p_feet_opt(:,2,k) = p_feetf(:,2);
     end
     if k < Nch(f_idx(3))
-        F_k(:,3) = F2_opt(:,:,k);
+        F_k(:,3) = F2_opt(:,k);
         p_feet_opt(:,3,k) = p_feet0(:,3);
     else
+        F2_opt(:,k) = NaN(3,1);
         p_feet_opt(:,3,k) = p_feetf(:,3);
     end
     if k < Nch(f_idx(4))
-        F_k(:,4) = F3_opt(:,:,k);
+        F_k(:,4) = F3_opt(:,k);
         p_feet_opt(:,4,k) = p_feet0(:,4);
     else
+        F3_opt(:,k) = NaN(3,1);
         p_feet_opt(:,4,k) = p_feetf(:,4);
     end
     F_opt(:,:,k) = F_k;
@@ -175,43 +184,117 @@ end
 
 if animate == true
     robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
-    qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
+    qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,1)]; % Pose
     
-    qj = getJointAngles(kin, p_body_opt(:,:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
+    qj = getJointAngles(kin, p_body_opt(:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
     qcj = [qc;qj];
     initVisualizer(robot, qcj);
     
-    % plotTransforms(p_ref, R_ref)
+    % plotTransforms(p_qref, R_qref)
     plts = [];
     while true
         for k = 1 : Nc
             i = getCurrentPhase(k, Nch);
-            qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
-            qj = getJointAngles(kin, p_body_opt(:,:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
+            qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,k)];
+            qj = getJointAngles(kin, p_body_opt(:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
             qcj = [qc; qj];
             plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
-                R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,:,1),plts);
+                R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts);
             waitfor(rates{i});
         end
     end
 else
-    F0_new = reshape(F0_opt, 3, length(F0_opt));
-    F1_new = reshape(F1_opt, 3, length(F1_opt));
-    F2_new = reshape(F2_opt, 3, length(F2_opt));
-    F3_new = reshape(F3_opt, 3, length(F3_opt));
-    
-    tiledlayout(4, 1)
-    nexttile
-    plot(t(1:length(F0_new), 1), F0_new)
-    nexttile
-    plot(t(1:length(F1_new), 1), F1_new)
-    legend('x', 'y', 'z')
-    nexttile
-    plot(t(1:length(F2_new), 1), F2_new)
-    legend('x', 'y', 'z')
-    nexttile
-    plot(t(1:length(F3_new), 1), F3_new)
-    legend('x', 'y', 'z')
+    colors = [0, 0.4470, 0.7410;
+              0.6350, 0.0780, 0.1840; 
+              0.9290, 0.6940, 0.1250];
+    figure;
+    tl1 = tiledlayout(4, 1);
+    nexttile;
+    hold on;
+    plot(t, F0_opt');
+    plot(t, F0_guess', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    legend('$f_{x}$', '$f_{y}$', '$f_{z}$', ...
+        '$\hat{f}_{x}$', '$\hat{f}_{y}$', '$\hat{f}_{z}$', ...
+        'Interpreter','latex', 'NumColumns', 3, 'Orientation','horizontal');
+    nexttile;
+    hold on;
+    plot(t, F1_opt');
+    plot(t, F1_guess', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    nexttile;
+    hold on;
+    plot(t, F2_opt');
+    plot(t, F2_guess', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    nexttile;
+    hold on;
+    plot(t, F3_opt');
+    plot(t, F3_guess', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    title(tl1, '$\vec{f}(t)$', 'Interpreter','latex');
+
+    figure;
+    tl2 = tiledlayout(2, 1);
+    nexttile;
+    hold on;
+    plot(t, p_body_opt');
+    plot(t, p_body_guess', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    legend('$p_{x}$', '$p_{y}$', '$p_{z}$', ...
+        '$\hat{p}_{x}$', '$\hat{p}_{y}$', '$\hat{p}_{z}$', ...
+        'Interpreter','latex', 'NumColumns', 3, 'Orientation','horizontal');
+    nexttile;
+    hold on;
+    plot(t, dp_body_opt');
+    plot(t, dp_body_guess', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    legend('$\dot{p}_{x}$', '$\dot{p}_{y}$', '$\dot{p}_{z}$', ...
+        '$\dot{\hat{p}}_{x}$', '$\dot{\hat{p}}_{y}$', '$\dot{\hat{p}}_{z}$', ...
+        'Interpreter','latex', 'NumColumns', 3, 'Orientation','horizontal');
+    title(tl2, '$\vec{p}(t)$ and $\dot{\vec{p}}(t)$', 'Interpreter','latex');
+
+    figure;
+    tl3 = tiledlayout(1, 1);
+    nexttile;
+    hold on;
+    plot(t, eul_opt_xyz');
+    plot(t, eul_ref_xyz', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    legend('$\gamma_{x}$', '$\gamma_{y}$', '$\gamma_{z}$', ...
+        '$\hat{\gamma}_{x}$', '$\hat{\gamma}_{y}$', '$\hat{\gamma}_{z}$', ...
+        'Interpreter','latex', 'NumColumns', 3, 'Orientation','horizontal');
+    title(tl3, '$\vec{\gamma}=$rotm2eul($R$, ZYX)', 'Interpreter','latex');
+
+    figure;
+    tl4 = tiledlayout(2, 1);
+    nexttile;
+    hold on;
+    plot(t, Omega_opt');
+    plot(t, Omega_guess', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    legend('$\Omega_{x}$', '$\Omega_{y}$', '$\Omega_{z}$', ...
+        '$\hat{\Omega}_{x}$', '$\hat{\Omega}_{y}$', '$\hat{\Omega}_{z}$', ...
+        'Interpreter','latex', 'NumColumns', 3, 'Orientation','horizontal');
+    nexttile;
+    hold on;
+    plot(t, DOmega_opt');
+    plot(t, DOmega_guess', '--');
+    ax = gca;
+    ax.ColorOrder = colors;
+    legend('$\dot{\Omega}_{x}$', '$\dot{\Omega}_{y}$', '$\dot{\Omega}_{z}$', ...
+        '$\dot{\hat{\Omega}}_{x}$', '$\dot{\hat{\Omega}}_{y}$', '$\dot{\hat{\Omega}}_{z}$', ...
+        'Interpreter','latex', 'NumColumns', 3, 'Orientation','horizontal');
+    title(tl4, '$\vec{\Omega}(t)$ and $\dot{\vec{\Omega}}(t)$', 'Interpreter','latex');
+
 end
 
 function qj = getJointAngles(kin, p_body_k, R_k, p_feet_k, y0)

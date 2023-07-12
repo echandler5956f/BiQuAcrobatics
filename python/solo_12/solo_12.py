@@ -195,6 +195,8 @@ class MotionProfile:
                 pass
             case 'backflip':
                 pass
+            case _:
+                print('ERROR!!!!!!!!!!!!! No such acrobatic preset exists.')
 
         self.eOmega = eOmega
         self.eF = eF
@@ -211,118 +213,122 @@ class MotionProfile:
 
     def generate_guesses(self, mass, g_accel, r, p_feet_bar, p_feet0, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
                          p_bodyf, Rf):
-        # # Initialize the initial guess matrices
-        # self.p_guess = np.hstack((p_body0[:, None], np.zeros((3, self.cons.num_steps - 2)), p_bodyf[:, None]))
-        # self.dp_guess = np.hstack((dp_body0[:, None], np.zeros((3, self.cons.num_steps - 1))))
-        # self.acc_ref = np.zeros((3, self.cons.num_steps))
-        # self.f_ref = np.zeros((3, 4, self.cons.num_steps))
-        # self.Omega_guess = np.hstack((Omega0[:, None], np.zeros((3, self.cons.num_steps - 1))))
-        # self.DOmega_guess = np.hstack((DOmega0[:, None], np.zeros((3, self.cons.num_steps - 1))))
-        #
-        # # Find time of liftoff for the initial guess
-        # it = None
-        # for it in range(self.cons.num_cons):
-        #     if self.cons.contact_list[it] == [0, 0, 0, 0]:
-        #         break
-        # t_lo = self.t_guess.cumsum()[it - 1]
-        # lo_steps = np.array(self.cons.step_list).cumsum()[it - 1]
-        #
-        # DT = SX.sym('DT')
-        # x1 = SX.sym('x1_ref')
-        # x2 = SX.sym('x2_ref')
-        # u1 = SX.sym('u1_ref')
-        # x = vertcat(x1, x2)
-        # u = vertcat(u1)
-        # xdot = vertcat(x2, u1)
-        # f1 = Function('f1_ref', [x, u, DT], [xdot, DT])
-        # X0 = SX.sym('X0', 2)
-        # U = SX.sym('U')
-        # X = X0
-        # for j in range(self.M):
-        #     k1, DT = f1(X, U, DT)
-        #     k2, DT = f1(X + DT / 2 * k1, U, DT)
-        #     k3, DT = f1(X + DT / 2 * k2, U, DT)
-        #     k4, DT = f1(X + DT * k3, U, DT)
-        #     X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
-        # F1 = Function('F', [X0, U, DT], [X], ['x0', 'u', 'dt'], ['xf'])
-        #
-        # # Find z-component of the acceleration reference
-        # t = 0
-        # for k in range(lo_steps - 1):
-        #     i = self.cons.get_current_phase(k)
-        #     dt = self.t_guess[i] / self.cons.step_list[i]
-        #     p_body_k = self.p_guess[2, k]
-        #     dp_body_k = self.dp_guess[2, k]
-        #     t = t + dt
-        #     grf = 0
-        #     clegs = self.cons.contact_list[i][0] + self.cons.contact_list[i][1] + \
-        #             self.cons.contact_list[i][2] + self.cons.contact_list[i][3]
-        #     grf = grf + clegs * f_max
-        #     ddp_body = ((self.beta + (self.gamma * t / t_lo)) * grf / mass)
-        #     if k == 0:
-        #         self.acc_ref[2, k] = (self.beta * grf / mass)
-        #     self.acc_ref[2, k + 1] = ddp_body
-        #     Fk1 = F1(x0=[p_body_k, dp_body_k], u=ddp_body, dt=dt / self.M)
-        #     self.p_guess[2, k + 1] = Fk1['xf'][0]
-        #     self.dp_guess[2, k + 1] = Fk1['xf'][1]
-        # self.acc_ref[2, lo_steps: self.cons.num_steps] = \
-        #     -np.ones(1, self.cons.num_steps - lo_steps) * g_accel[2]
-        # # Find the time-of-flight to reach p_bodyf
-        # t_ = np.roots([-(1 / 2) * g_accel[2], self.dp_guess[2, lo_steps - 1],
-        #                self.p_guess[2, lo_steps - 1] - p_bodyf[2]])
-        # # print(self.p_guess)
-        # # print(self.p_guess[2, lo_steps - 1])
-        # # print(-p_bodyf[2] + self.p_guess[2, lo_steps - 1])
-        # # print(self.dp_guess[2, lo_steps - 1])
+        # Initialize the initial guess matrices
+        self.p_guess = np.hstack((p_body0[:, None], np.zeros((3, self.cons.num_steps - 2)), p_bodyf[:, None]))
+        self.dp_guess = np.hstack((dp_body0[:, None], np.zeros((3, self.cons.num_steps - 1))))
+        self.acc_ref = np.zeros((3, self.cons.num_steps))
+        self.f_ref = np.zeros((3, 4, self.cons.num_steps))
+        self.Omega_guess = np.hstack((Omega0[:, None], np.zeros((3, self.cons.num_steps - 1))))
+        self.DOmega_guess = np.hstack((DOmega0[:, None], np.zeros((3, self.cons.num_steps - 1))))
+        tmp_guess = self.t_guess
+
+        # Find time of liftoff for the initial guess
+        it = None
+        for it in range(self.cons.num_cons):
+            if self.cons.contact_list[it] == [0, 0, 0, 0]:
+                break
+        t_lo = self.t_guess.cumsum()[it - 1]
+        lo_steps = np.array(self.cons.step_list).cumsum()[it - 1]
+
+        DT = SX.sym('DT')
+        x1 = SX.sym('x1_ref')
+        x2 = SX.sym('x2_ref')
+        u1 = SX.sym('u1_ref')
+        x = vertcat(x1, x2)
+        u = vertcat(u1)
+        xdot = vertcat(x2, u1)
+        f1 = Function('f1_ref', [x, u, DT], [xdot, DT])
+        X0 = SX.sym('X0', 2)
+        U = SX.sym('U')
+        X = X0
+        for j in range(self.M):
+            k1, DT = f1(X, U, DT)
+            k2, DT = f1(X + DT / 2 * k1, U, DT)
+            k3, DT = f1(X + DT / 2 * k2, U, DT)
+            k4, DT = f1(X + DT * k3, U, DT)
+            X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        F1 = Function('F', [X0, U, DT], [X], ['x0', 'u', 'dt'], ['xf'])
+
+        # Find z-component of the acceleration reference
+        t = 0
+        for k in range(lo_steps - 1):
+            i = self.cons.get_current_phase(k)
+            dt = self.t_guess[i] / self.cons.step_list[i]
+            p_body_k = self.p_guess[2, k]
+            dp_body_k = self.dp_guess[2, k]
+            t = t + dt
+            grf = 0
+            clegs = self.cons.contact_list[i][0] + self.cons.contact_list[i][1] + \
+                    self.cons.contact_list[i][2] + self.cons.contact_list[i][3]
+            grf = grf + clegs * f_max
+            ddp_body = ((self.beta + (self.gamma * t / t_lo)) * grf / mass)
+            if k == 0:
+                self.acc_ref[2, k] = (self.beta * grf / mass)
+            self.acc_ref[2, k + 1] = ddp_body
+            Fk1 = F1(x0=[p_body_k, dp_body_k], u=ddp_body, dt=dt / self.M)
+            self.p_guess[2, k + 1] = Fk1['xf'][0]
+            self.dp_guess[2, k + 1] = Fk1['xf'][1]
+        self.acc_ref[2, lo_steps: self.cons.num_steps] = \
+            -np.ones(1, self.cons.num_steps - lo_steps) * g_accel[2]
+        # Find the time-of-flight to reach p_bodyf
+        t_ = np.roots([-(1 / 2) * g_accel[2], self.dp_guess[2, lo_steps - 1],
+                       self.p_guess[2, lo_steps - 1] - p_bodyf[2]])
+        # print(self.p_guess)
+        # print(self.p_guess[2, lo_steps - 1])
+        # print(-p_bodyf[2] + self.p_guess[2, lo_steps - 1])
+        # print(self.dp_guess[2, lo_steps - 1])
         # print(self.acc_ref[2, :])
-        # t_fl = t_[0]
-        # if t_[0] < 0:
-        #     t_fl = t_[1]
-        # self.t_guess[it] = t_fl
-        # t_la = self.t_guess.sum()
-        # avg_acc = np.array(2 * (p_bodyf[0:2] - self.p_guess[0:2, 0] - self.dp_guess[0:2, 0] * t_la) / np.power(t_la, 2))
-        # # print(self.t_guess)
-        # # print(avg_acc)
-        #
-        # # r = (2 * avg_acc) / t_la
-        # r = avg_acc
-        # # print(self.t_guess)
-        # # print(avg_acc)
-        # # print(r)
-        #
-        # # Integrate the xy-component of the acceleration references to get the position and velocity reference
-        # t = 0
-        # for k in range(self.cons.num_steps - 1):
-        #     i = self.cons.get_current_phase(k)
-        #     dt = self.t_guess[i] / self.cons.step_list[i]
-        #     p_body_k = self.p_guess[:, k]
-        #     dp_body_k = self.dp_guess[:, k]
-        #     # if k < lo_steps:
-        #     self.acc_ref[0:2, k] = r
-        #     # self.acc_ref[0:2, k] = (t_la / t_lo) * r * t
-        #     ddp_body = self.acc_ref[:, k]
-        #     t = t + dt
-        #     Fk1x = F1(x0=[p_body_k[0], dp_body_k[0]], u=ddp_body[0], dt=dt / self.M)
-        #     Fk1y = F1(x0=[p_body_k[1], dp_body_k[1]], u=ddp_body[1], dt=dt / self.M)
-        #     Fk1z = F1(x0=[p_body_k[2], dp_body_k[2]], u=ddp_body[2], dt=dt / self.M)
-        #     p_body_next = np.reshape([Fk1x['xf'][0], Fk1y['xf'][0], Fk1z['xf'][0]], (3,))
-        #     dp_body_next = np.reshape([Fk1x['xf'][1], Fk1y['xf'][1], Fk1z['xf'][1]], (3,))
-        #     self.p_guess[:, k + 1] = p_body_next
-        #     self.dp_guess[:, k + 1] = dp_body_next
-        #
-        #     clegs = self.cons.contact_list[i][0] + self.cons.contact_list[i][1] + \
-        #             self.cons.contact_list[i][2] + self.cons.contact_list[i][3]
-        #     if clegs > 0:
-        #         tmp = np.array([0, 0, self.acc_ref[2, k]])
-        #         self.f_ref[:, 0, k] = (self.cons.contact_list[i][0] / clegs) * (tmp + g_accel) * mass
-        #         self.f_ref[:, 1, k] = (self.cons.contact_list[i][1] / clegs) * (tmp + g_accel) * mass
-        #         self.f_ref[:, 2, k] = (self.cons.contact_list[i][2] / clegs) * (tmp + g_accel) * mass
-        #         self.f_ref[:, 3, k] = (self.cons.contact_list[i][3] / clegs) * (tmp + g_accel) * mass
-        #
-        # # print(self.p_guess[0])
-        # # print(self.dp_guess)
-        # # print(self.acc_ref)
-        # # print(self.f_ref[:, 2, :])
+        t_fl = t_[0]
+        if t_[0] < 0:
+            t_fl = t_[1]
+        self.t_guess[it] = t_fl
+        t_la = self.t_guess.sum()
+        avg_acc = np.array(2 * (p_bodyf[0:2] - self.p_guess[0:2, 0]) / (np.power(t_lo, 2) + (2 * t_fl * t_lo)))
+        # print(self.t_guess)
+        # print(avg_acc)
+
+        # r = (2 * avg_acc) / t_la
+        r = avg_acc
+        # print(self.t_guess)
+        # print(avg_acc)
+        # print(r)
+
+        # Integrate the xy-component of the acceleration references to get the position and velocity reference
+        t = 0
+        for k in range(self.cons.num_steps - 1):
+            i = self.cons.get_current_phase(k)
+            dt = self.t_guess[i] / self.cons.step_list[i]
+            p_body_k = self.p_guess[:, k]
+            dp_body_k = self.dp_guess[:, k]
+            if k < lo_steps:
+                self.acc_ref[0:2, k] = r
+            # self.acc_ref[0:2, k] = (t_la / t_lo) * r * t
+            ddp_body = self.acc_ref[:, k]
+            t = t + dt
+            Fk1x = F1(x0=[p_body_k[0], dp_body_k[0]], u=ddp_body[0], dt=dt / self.M)
+            Fk1y = F1(x0=[p_body_k[1], dp_body_k[1]], u=ddp_body[1], dt=dt / self.M)
+            Fk1z = F1(x0=[p_body_k[2], dp_body_k[2]], u=ddp_body[2], dt=dt / self.M)
+            p_body_next = np.reshape([Fk1x['xf'][0], Fk1y['xf'][0], Fk1z['xf'][0]], (3,))
+            dp_body_next = np.reshape([Fk1x['xf'][1], Fk1y['xf'][1], Fk1z['xf'][1]], (3,))
+            self.p_guess[:, k + 1] = p_body_next
+            self.dp_guess[:, k + 1] = dp_body_next
+
+            clegs = self.cons.contact_list[i][0] + self.cons.contact_list[i][1] + \
+                    self.cons.contact_list[i][2] + self.cons.contact_list[i][3]
+            if clegs > 0:
+                tmp = np.array([0, 0, self.acc_ref[2, k]])
+                tmp = self.acc_ref[:, k]
+                self.f_ref[:, 0, k] = (self.cons.contact_list[i][0] / clegs) * (tmp + g_accel) * mass
+                self.f_ref[:, 1, k] = (self.cons.contact_list[i][1] / clegs) * (tmp + g_accel) * mass
+                self.f_ref[:, 2, k] = (self.cons.contact_list[i][2] / clegs) * (tmp + g_accel) * mass
+                self.f_ref[:, 3, k] = (self.cons.contact_list[i][3] / clegs) * (tmp + g_accel) * mass
+
+        # print(self.p_guess[0])
+        # print(self.dp_guess)
+        # print(self.acc_ref[0, :])
+        # print(self.f_ref[:, 2, :])
+
+        # self.t_guess = tmp_guess
 
         # Reference Trajectory
         slerp = Slerp([0, self.cons.num_steps], rp.concatenate([rp.from_matrix(R0), rp.from_matrix(Rf)]))
@@ -348,10 +354,10 @@ def integrate_omega_history(cons, R0, Omega_opt, T_opt, e_terms):
     R_k = R0
     for k in range(cons.num_steps):
         i = cons.get_current_phase(k)
-        dt = T_opt[0, 0, i] / cons.step_list[i]
+        dt = T_opt[0, i] / cons.step_list[i]
         if k != 0:
-            R_k = np.matmul(R_k, approximate_exp_a(skew(Omega_opt[k, :, :] * dt), e_terms))
-        R_opt[k, 0:3, 0:3] = transpose(R_k)
+            R_k = np.matmul(R_k, approximate_exp_a(skew(Omega_opt[k, :] * dt), e_terms))
+        R_opt[k, 0:3, 0:3] = R_k
     return R_opt
 
 
@@ -420,18 +426,18 @@ e_terms = 8
 l_terms = 8
 
 # Steps per contact phase
-step_list = [30, 30, 30]
+step_list = [30, 30]
 
 # Initial States
-p_body0 = np.array([0, 0, 0.3])
+p_body0 = np.array([0, 0, 0.15])
 dp_body0 = np.array([0, 0, 0])
 Omega0 = np.array([0, 0, 0])
 DOmega0 = np.array([0, 0, 0])
 R0 = rp.from_euler('xyz', [0, 0, 0], True).as_matrix()
 
 # Final States
-p_bodyf = np.array([0.4, 0.3, 0.3])
-Rf = rp.from_euler('xyz', [0, 0, 45], True).as_matrix()
+p_bodyf = np.array([0.0, 0.0, 0.25])
+Rf = rp.from_euler('xyz', [0, 0, 90], True).as_matrix()
 
 # Place the feet below the hip
 tmp = np.array([0.194, 0.1479])
@@ -446,7 +452,7 @@ p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), 
 # Roughly what type of action do you want the robot to take?
 # This only influences the initial guess and some tuning parameters to make the program converge better
 # ['jump', 'spinning_jump', 'diagonal_jump', 'barrel_roll', 'backflip']
-mp = MotionProfile('diagonal_jump', step_list, mass, g_accel, r, p_feet_bar, p_feet0, f_max, p_body0, dp_body0, Omega0,
+mp = MotionProfile('spinning_jump', step_list, mass, g_accel, r, p_feet_bar, p_feet0, f_max, p_body0, dp_body0, Omega0,
                    DOmega0, R0, p_bodyf, Rf)
 
 # GRF limits
@@ -515,6 +521,9 @@ constraints.add_general_constraints(sum1(T), [mp.tMin], [mp.tMax])
 constraints.add_design_constraints(T, mp.t_imin,
                                    mp.t_imax,
                                    mp.t_guess, 'T')
+# Rtest = SX.sym('R_test', 3, 3)
+# print(reshape(Rtest, (9, 1)))
+# print(np.reshape(Rf, (9, 1)))
 R_k = R0
 for k in range(mp.cons.num_steps):
     i = mp.cons.get_current_phase(k)
@@ -539,6 +548,25 @@ for k in range(mp.cons.num_steps):
         F_2 = vertcat(F_2, MX.sym('F_2_k{}'.format(k), 3, 1))
     if mp.cons.contact_list[mp.cons.get_current_phase(k)][3]:
         F_3 = vertcat(F_3, MX.sym('F_3_k{}'.format(k), 3, 1))
+
+    # DT = SX.sym('DT')
+    # x1 = SX.sym('x1_ref')
+    # x2 = SX.sym('x2_ref')
+    # u1 = SX.sym('u1_ref')
+    # x = vertcat(x1, x2)
+    # u = vertcat(u1)
+    # xdot = vertcat(x2, u1)
+    # f1 = Function('f1_ref', [x, u, DT], [xdot, DT])
+    # X0 = SX.sym('X0', 2)
+    # U = SX.sym('U')
+    # X = X0
+    # for j in range(self.M):
+    #     k1, DT = f1(X, U, DT)
+    #     k2, DT = f1(X + DT / 2 * k1, U, DT)
+    #     k3, DT = f1(X + DT / 2 * k2, U, DT)
+    #     k4, DT = f1(X + DT * k3, U, DT)
+    #     X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+    # F1 = Function('F', [X0, U, DT], [X], ['x0', 'u', 'dt'], ['xf'])
 
 J = 0
 for k in range(mp.cons.num_steps):
@@ -588,10 +616,13 @@ for k in range(mp.cons.num_steps):
         # GRF on each foot (3x1)
         F_0_k = F_0[3 * k: 3 * (k + 1)]
         grf = grf + F_0_k
-        tau = tau + cross(F_0_k, (p_body_k - p_feet0[:, 0]))
+        # tau = tau + cross((p_feet0[:, 0] - p_body_k), F_0_k)
+        tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k), F_0_k)
         constraints.add_general_constraints(fabs(F_0_k[0] / F_0_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_0_k[1] / F_0_k[2]), [0], [mu])
-        constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 0] - p_body_k)) - p_feet_bar[:, 0]),
+        # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feet0[:, 0] - p_body_k)) - p_feet_bar[:, 0]),
+        #                                     [0], [r])
+        constraints.add_general_constraints(norm_2(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 0]),
                                             [0], [r])
         # constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 0, k], 'F_0')
         constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
@@ -599,10 +630,13 @@ for k in range(mp.cons.num_steps):
     if mp.cons.contact_list[i][1]:
         F_1_k = F_1[3 * k: 3 * (k + 1)]
         grf = grf + F_1_k
-        tau = tau + cross(F_1_k, (p_body_k - p_feet0[:, 1]))
+        # tau = tau + cross((p_feet0[:, 1] - p_body_k), F_1_k)
+        tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k), F_1_k)
         constraints.add_general_constraints(fabs(F_1_k[0] / F_1_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_1_k[1] / F_1_k[2]), [0], [mu])
-        constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 1] - p_body_k)) - p_feet_bar[:, 1]),
+        # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feet0[:, 1] - p_body_k)) - p_feet_bar[:, 1]),
+        #                                     [0], [r])
+        constraints.add_general_constraints(norm_2(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 1]),
                                             [0], [r])
         # constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 1, k], 'F_1')
         constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
@@ -610,10 +644,13 @@ for k in range(mp.cons.num_steps):
     if mp.cons.contact_list[i][2]:
         F_2_k = F_2[3 * k: 3 * (k + 1)]
         grf = grf + F_2_k
-        tau = tau + cross(F_2_k, (p_body_k - p_feet0[:, 2]))
+        # tau = tau + cross((p_feet0[:, 2] - p_body_k), F_2_k)
+        tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k), F_2_k)
         constraints.add_general_constraints(fabs(F_2_k[0] / F_2_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_2_k[1] / F_2_k[2]), [0], [mu])
-        constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 2] - p_body_k)) - p_feet_bar[:, 2]),
+        # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feet0[:, 2] - p_body_k)) - p_feet_bar[:, 2]),
+        #                                     [0], [r])
+        constraints.add_general_constraints(norm_2(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 2]),
                                             [0], [r])
         # constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 2, k], 'F_2')
         constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
@@ -621,10 +658,13 @@ for k in range(mp.cons.num_steps):
     if mp.cons.contact_list[i][3]:
         F_3_k = F_3[3 * k: 3 * (k + 1)]
         grf = grf + F_3_k
-        tau = tau + cross(F_3_k, (p_body_k - p_feet0[:, 3]))
+        # tau = tau + cross((p_feet0[:, 3] - p_body_k), F_3_k)
+        tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k), F_3_k)
         constraints.add_general_constraints(fabs(F_3_k[0] / F_3_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_3_k[1] / F_3_k[2]), [0], [mu])
-        constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feet0[:, 3] - p_body_k)) - p_feet_bar[:, 3]),
+        # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feet0[:, 3] - p_body_k)) - p_feet_bar[:, 3]),
+        #                                     [0], [r])
+        constraints.add_general_constraints(norm_2(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 3]),
                                             [0], [r])
         # constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 3, k], 'F_3')
         constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], [0, 0, g_accel[2] * mass / clegs],
@@ -641,8 +681,10 @@ for k in range(mp.cons.num_steps):
         p_body_next = p_body_k + (dp_body_k * dt) + ((1 / 2) * ddp_body * power(dt, 2))
         dp_body_next = dp_body_k + ddp_body * dt
         Omega_next = Omega_k + DOmega_k * dt
+        # DOmega_next = mtimes(np.linalg.inv(inertia),
+        #                      (mtimes(transpose(R_k), tau) - cross(Omega_k, mtimes(inertia, Omega_k))))
         DOmega_next = mtimes(np.linalg.inv(inertia),
-                             (mtimes(transpose(R_k), tau) - cross(Omega_k, mtimes(inertia, Omega_k))))
+                             (tau - cross(Omega_k, mtimes(inertia, Omega_k))))
 
         constraints.add_general_constraints(p_body_k1 - p_body_next, np.zeros((3, 1)), np.zeros((3, 1)))
         constraints.add_general_constraints(Omega_k1 - Omega_next, np.zeros((3, 1)), np.zeros((3, 1)))
@@ -657,10 +699,14 @@ for k in range(mp.cons.num_steps):
         constraints.add_design_constraints(DOmega_k, DOmega0, DOmega0, DOmega0, 'DOmega')
 
     if k == mp.cons.num_steps - 1:
-        constraints.add_general_constraints(reshape(R_k, (9, 1)), np.reshape(Rf, (9, 1)), np.reshape(Rf, (9, 1)))
         constraints.add_design_constraints(p_body_k, p_bodyf, p_bodyf, p_bodyf, 'p_body')
+        constraints.add_general_constraints(reshape(transpose(R_k), (9, 1)), np.reshape(Rf, (9, 1)), np.reshape(Rf, (9, 1)))
+        # print(Rf)
+        # print(R_k)
         for leg in range(4):
-            constraints.add_general_constraints(norm_2(mtimes(R_k, (p_feetf[:, leg] - p_body_k)) - p_feet_bar[:, leg]),
+            # constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), (p_feetf[:, leg] - p_body_k)) - p_feet_bar[:, leg]),
+            #                                     [0], [r])
+            constraints.add_general_constraints(norm_2(mtimes(transpose(Rf), p_feetf[:, leg]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, leg]),
                                                 [0], [r])
 
     # Objective Function
@@ -681,7 +727,7 @@ nlp = {'x': x, 'f': J, 'g': constraints.g}
 # Solver options
 opts = {"expand": True,
         "detect_simple_bounds": True, "warn_initial_bounds": True,
-        "ipopt": {"max_iter": 100,
+        "ipopt": {"max_iter": 1000,
                   "fixed_variable_treatment": "make_constraint",
                   "hessian_approximation": "limited-memory",
                   "mumps_mem_percent": 10000,
@@ -703,7 +749,6 @@ p_body_opt = solution["p_body"]["opt_x"]
 dp_body_opt = solution["dp_body"]["opt_x"]
 Omega_opt = solution["Omega"]["opt_x"]
 DOmega_opt = solution["DOmega"]["opt_x"]
-R_opt = integrate_omega_history(mp.cons, R0, Omega_opt, T_opt, e_terms)
 F_0_opt = solution["F_0"]["opt_x"]
 F_1_opt = solution["F_1"]["opt_x"]
 F_2_opt = solution["F_2"]["opt_x"]
@@ -714,26 +759,44 @@ p_body_opt = p_body_opt.reshape(p_body_opt.shape[0], -1)
 dp_body_opt = dp_body_opt.reshape(dp_body_opt.shape[0], -1)
 Omega_opt = Omega_opt.reshape(Omega_opt.shape[0], -1)
 DOmega_opt = DOmega_opt.reshape(DOmega_opt.shape[0], -1)
+R_opt = integrate_omega_history(mp.cons, R0, Omega_opt, T_opt, e_terms)
+# print('--------------------')
+# print(R_opt[mp.cons.num_steps - 1, :, :])
+# print('--------------------')
+# print(Rf)
+# print('--------------------')
+# erk1 = inv_skew(approximate_log_a(mtimes(transpose(Rf), R_opt[mp.cons.num_steps - 1, :, :]), l_terms))
+# print(mtimes(transpose(erk1), erk1))
+
 R_opt = R_opt.reshape(mp.cons.num_steps, 9)
 R_guess = np.array(mp.R_ref).reshape(mp.cons.num_steps, 9)
+# print(R_opt[mp.cons.num_steps - 1, :])
+# print(R_guess[mp.cons.num_steps - 1, :])
 F_0_opt = F_0_opt.reshape(F_0_opt.shape[0], -1)
 F_1_opt = F_1_opt.reshape(F_1_opt.shape[0], -1)
 F_2_opt = F_2_opt.reshape(F_2_opt.shape[0], -1)
 F_3_opt = F_3_opt.reshape(F_3_opt.shape[0], -1)
+np_con_list = np.array(mp.cons.contact_list)
+np_step_list = np.array(mp.step_list)
 
-# T_guess = mp.t_guess
-# p_body_guess = mp.p_guess
-# dp_body_guess = mp.dp_guess
-# Omega_guess = mp.Omega_guess
-# DOmega_guess = mp.DOmega_guess
-# F0_guess = mp.f_ref[:, 0, :]
-# F1_guess = mp.f_ref[:, 1, :]
-# F2_guess = mp.f_ref[:, 2, :]
-# F3_guess = mp.f_ref[:, 3, :]
-# F0_guess.reshape(F0_guess.shape[0], -1)
-# F1_guess.reshape(F1_guess.shape[0], -1)
-# F2_guess.reshape(F2_guess.shape[0], -1)
-# F3_guess.reshape(F3_guess.shape[0], -1)
+F_0_opt = np.vstack((F_0_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 0], np_step_list), 3))))
+F_1_opt = np.vstack((F_1_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 1], np_step_list), 3))))
+F_2_opt = np.vstack((F_2_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 2], np_step_list), 3))))
+F_3_opt = np.vstack((F_3_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 3], np_step_list), 3))))
+
+T_guess = mp.t_guess
+p_body_guess = np.transpose(mp.p_guess)
+dp_body_guess = np.transpose(mp.dp_guess)
+Omega_guess = np.transpose(mp.Omega_guess)
+DOmega_guess = np.transpose(mp.DOmega_guess)
+F0_guess = mp.f_ref[:, 0, :]
+F1_guess = mp.f_ref[:, 1, :]
+F2_guess = mp.f_ref[:, 2, :]
+F3_guess = mp.f_ref[:, 3, :]
+F0_guess = np.transpose(F0_guess.reshape(F0_guess.shape[0], -1))
+F1_guess = np.transpose(F1_guess.reshape(F1_guess.shape[0], -1))
+F2_guess = np.transpose(F2_guess.reshape(F2_guess.shape[0], -1))
+F3_guess = np.transpose(F3_guess.reshape(F3_guess.shape[0], -1))
 
 # Print solution
 # print("-----")
@@ -763,15 +826,15 @@ np.savetxt('solo_12/opt/F1_opt.csv', F_1_opt, delimiter=',')
 np.savetxt('solo_12/opt/F2_opt.csv', F_2_opt, delimiter=',')
 np.savetxt('solo_12/opt/F3_opt.csv', F_3_opt, delimiter=',')
 
-# np.savetxt('solo_12/initial_guess/T_guess.csv', T_guess, delimiter=',')
-# np.savetxt('solo_12/initial_guess/p_body_guess.csv', p_body_guess, delimiter=',')
-# np.savetxt('solo_12/initial_guess/dp_body_guess.csv', dp_body_guess, delimiter=',')
-# np.savetxt('solo_12/initial_guess/Omega_guess.csv', Omega_guess, delimiter=',')
-# np.savetxt('solo_12/initial_guess/DOmega_guess.csv', DOmega_guess, delimiter=',')
-# np.savetxt('solo_12/initial_guess/F0_guess.csv', F0_guess, delimiter=',')
-# np.savetxt('solo_12/initial_guess/F1_guess.csv', F1_guess, delimiter=',')
-# np.savetxt('solo_12/initial_guess/F2_guess.csv', F2_guess, delimiter=',')
-# np.savetxt('solo_12/initial_guess/F3_guess.csv', F3_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/T_guess.csv', T_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/p_body_guess.csv', p_body_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/dp_body_guess.csv', dp_body_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/Omega_guess.csv', Omega_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/DOmega_guess.csv', DOmega_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/F0_guess.csv', F0_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/F1_guess.csv', F1_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/F2_guess.csv', F2_guess, delimiter=',')
+np.savetxt('solo_12/initial_guess/F3_guess.csv', F3_guess, delimiter=',')
 
 np.savetxt('solo_12/metadata/step_list.csv', np.array(step_list), delimiter=',')
 np.savetxt('solo_12/metadata/contact_list.csv', np.array(mp.cons.contact_list), delimiter=',')
