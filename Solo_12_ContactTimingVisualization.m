@@ -2,6 +2,8 @@
 
 clc; close all
 
+animate = true;
+
 % Kinematics
 
 syms q [3, 1]
@@ -65,6 +67,7 @@ dp_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt
 Omega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\Omega_opt"))), 3, 1, Nc);
 DOmega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\DOmega_opt"))), 3, 1, Nc);
 R_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\R_opt"))), 3, 3, Nc);
+R_tmp = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\R_guess"))), 3, 3, Nc);
 p_feet_opt = zeros(3, 4, Nc);
 
 f_idx = [0;0;0;0];
@@ -81,7 +84,6 @@ T_opt = table2array(readtable(pwd + "\python\solo_12\opt\T_opt"));
 % dp_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\dp_body_guess"))), 3, 1, Nc);
 % Omega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\Omega_guess"))), 3, 1, Nc);
 % DOmega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\DOmega_guess"))), 3, 1, Nc);
-% R_tmp = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\R_guess"))), 3, 3, Nc);
 % F0_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F0_guess")), 3, 1, Nc);
 % F1_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F1_guess")), 3, 1, Nc);
 % F2_guess = reshape(table2array(readtable(pwd + "\python\solo_12\initial_guess\F2_guess")), 3, 1, Nc);
@@ -171,44 +173,46 @@ for i = 1 : n_p
     end
 end
 
-F0_new = reshape(F0_opt, 3, length(F0_opt));
-F1_new = reshape(F1_opt, 3, length(F1_opt));
-F2_new = reshape(F2_opt, 3, length(F2_opt));
-F3_new = reshape(F3_opt, 3, length(F3_opt));
-
-tiledlayout(4, 1)
-nexttile
-plot(t(1:length(F0_new), 1), F0_new)
-nexttile
-plot(t(1:length(F1_new), 1), F1_new)
-legend('x', 'y', 'z')
-nexttile
-plot(t(1:length(F2_new), 1), F2_new)
-legend('x', 'y', 'z')
-nexttile
-plot(t(1:length(F3_new), 1), F3_new)
-legend('x', 'y', 'z')
-
-% robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
-% qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
-% 
-% qj = getJointAngles(kin, p_body_opt(:,:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
-% qcj = [qc;qj];
-% initVisualizer(robot, qcj);
-% 
-% % plotTransforms(p_ref, R_ref)
-% plts = [];
-% while true
-%     for k = 1 : Nc
-%         i = getCurrentPhase(k, Nch);
-%         qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
-%         qj = getJointAngles(kin, p_body_opt(:,:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
-%         qcj = [qc; qj];
-%         plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
-%             R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,:,1),plts);
-%         waitfor(rates{i});
-%     end
-% end
+if animate == true
+    robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
+    qc = [transpose(rotm2eul(R_opt(:,:,1), 'ZYX')); p_body_opt(:,:,1)]; % Pose
+    
+    qj = getJointAngles(kin, p_body_opt(:,:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
+    qcj = [qc;qj];
+    initVisualizer(robot, qcj);
+    
+    % plotTransforms(p_ref, R_ref)
+    plts = [];
+    while true
+        for k = 1 : Nc
+            i = getCurrentPhase(k, Nch);
+            qc = [transpose(rotm2eul(R_opt(:,:,k), 'ZYX')); p_body_opt(:,:,k)];
+            qj = getJointAngles(kin, p_body_opt(:,:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
+            qcj = [qc; qj];
+            plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
+                R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,:,1),plts);
+            waitfor(rates{i});
+        end
+    end
+else
+    F0_new = reshape(F0_opt, 3, length(F0_opt));
+    F1_new = reshape(F1_opt, 3, length(F1_opt));
+    F2_new = reshape(F2_opt, 3, length(F2_opt));
+    F3_new = reshape(F3_opt, 3, length(F3_opt));
+    
+    tiledlayout(4, 1)
+    nexttile
+    plot(t(1:length(F0_new), 1), F0_new)
+    nexttile
+    plot(t(1:length(F1_new), 1), F1_new)
+    legend('x', 'y', 'z')
+    nexttile
+    plot(t(1:length(F2_new), 1), F2_new)
+    legend('x', 'y', 'z')
+    nexttile
+    plot(t(1:length(F3_new), 1), F3_new)
+    legend('x', 'y', 'z')
+end
 
 function qj = getJointAngles(kin, p_body_k, R_k, p_feet_k, y0)
     T_wb = [transpose(R_k),-p_body_k; 

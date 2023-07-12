@@ -637,7 +637,7 @@ for k in range(mp.cons.num_steps):
         Omega_k1 = Omega[3 * (k + 1): 3 * (k + 2)]
         DOmega_k1 = DOmega[3 * (k + 1): 3 * (k + 2)]
 
-        ddp_body = ((grf / mass) - g_accel.reshape((3,1)))
+        ddp_body = ((grf / mass) - g_accel.reshape((3, 1)))
         p_body_next = p_body_k + (dp_body_k * dt) + ((1 / 2) * ddp_body * power(dt, 2))
         dp_body_next = dp_body_k + ddp_body * dt
         Omega_next = Omega_k + DOmega_k * dt
@@ -665,6 +665,7 @@ for k in range(mp.cons.num_steps):
 
     # Objective Function
     e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), l_terms))
+    # e_R_k = (1/2) * inv_skew(mtimes(transpose(R_ref_k), R_k) - mtimes(transpose(R_k), R_ref_k))
     J = J + (mp.eOmega * mtimes(transpose(Omega_k), Omega_k))
     J = J + (mp.eF * mtimes(transpose(grf), grf))
     J = J + (mp.eR * mtimes(transpose(e_R_k), e_R_k))
@@ -678,11 +679,13 @@ x0 = constraints.w0
 nlp = {'x': x, 'f': J, 'g': constraints.g}
 
 # Solver options
-opts = {"expand": True, "ipopt": {"max_iter": 100,
-                                  "fixed_variable_treatment": "make_constraint",
-                                  "hessian_approximation": "limited-memory",
-                                  "mumps_mem_percent": 10000,
-                                  "print_level": 5}}
+opts = {"expand": True,
+        "detect_simple_bounds": True, "warn_initial_bounds": True,
+        "ipopt": {"max_iter": 100,
+                  "fixed_variable_treatment": "make_constraint",
+                  "hessian_approximation": "limited-memory",
+                  "mumps_mem_percent": 10000,
+                  "print_level": 5}}
 
 # Allocate a solver
 solver = nlpsol("solver", "ipopt", nlp, opts)
@@ -776,5 +779,3 @@ np.savetxt('solo_12/metadata/p_feet0.csv', p_feet0, delimiter=',')
 np.savetxt('solo_12/metadata/p_feetf.csv', p_feetf, delimiter=',')
 np.savetxt('solo_12/metadata/p_feet_bar.csv', np.array(p_feet_bar), delimiter=',')
 np.savetxt('solo_12/metadata/r.csv', [r], delimiter=',')
-
-
