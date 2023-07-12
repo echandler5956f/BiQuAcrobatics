@@ -146,10 +146,10 @@ class MotionProfile:
         eR = 1e-3
 
         # Scaling parameter for initial trajectory guess
-        beta = -0.1
+        beta = -0.105
 
         # Scaling parameter for initial trajectory guess
-        gamma = 0.45
+        gamma = 0.4
 
         # Minimum total time
         tMin = 1.0
@@ -472,7 +472,7 @@ mu = 0.7
 
 # Maximum ground reaction force in the Z direction
 # (friction constraints imply the force in the X and Y direction have to be less than this)
-f_max = 50
+f_max = 25
 
 # Degree of Taylor series approximation for matrix exponential
 e_terms = 8
@@ -491,7 +491,7 @@ DOmega0 = np.array([0, 0, 0])
 R0 = rp.from_euler('zxy', [-180, 0, 0], True).as_matrix()
 
 # Final States
-p_bodyf = np.array([0.4, 0.0, 0.3])
+p_bodyf = np.array([0.25, 0.0, 0.3])
 Rf = rp.from_euler('zxy', [-180, 0, 0], True).as_matrix()
 
 # Place the feet below the hip
@@ -510,9 +510,6 @@ p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), 
 # ['jump', 'spinning_jump', 'diagonal_jump', 'barrel_roll', 'backflip']
 mp = MotionProfile('backflip', step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
                    p_bodyf, Rf, True)
-# print(mp.p_guess)
-# print(mp.f_ref)
-# print(mp.t_guess)
 
 # GRF limits
 f_bounds = np.array([[-inf, inf],
@@ -521,9 +518,9 @@ f_bounds = np.array([[-inf, inf],
 
 # COM bounding constraint. Ideally you would set this to some section of a
 # tube each timestep within you want the trajectory to lie
-p_body_bounds = np.array([[-1.0, 0.25],
+p_body_bounds = np.array([[-0.375, 1],
                           [-0.1, 0.1],
-                          [0.05, inf]])
+                          [0.025, inf]])
 
 # Velocity bounds to make the problem more solvable
 dp_body_bounds = np.array([[-inf, inf],
