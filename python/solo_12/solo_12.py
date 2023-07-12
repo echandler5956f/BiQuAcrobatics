@@ -98,7 +98,7 @@ class Contacts:
 
 
 class MotionProfile:
-    def __init__(self, motion_type, step_list, mass, g_accel, r, p_feet_bar, p_feet0,
+    def __init__(self, motion_type, step_list, mass, inertia, g_accel, r, p_feet0,
                  f_max, p_body0, dp_body0, Omega0, DOmega0, R0, p_bodyf, Rf):
         self.motion_type = motion_type
         self.step_list = step_list
@@ -123,12 +123,16 @@ class MotionProfile:
         self.Omega_guess = None
         self.DOmega_guess = None
         self.R_ref = None
+        self.p_axis = None
 
-        self.generate_parameters()
-        self.generate_guesses(mass, g_accel, r, p_feet_bar, p_feet0, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
+        self.d_integrator = None
+        self.rot_integrator = None
+
+        self.generate_parameters(inertia)
+        self.generate_guesses(mass, g_accel, r, p_feet0, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
                               p_bodyf, Rf)
 
-    def generate_parameters(self):
+    def generate_parameters(self, inertia):
         # Defaults
 
         # Omega cost weight
@@ -184,17 +188,20 @@ class MotionProfile:
         t_imax = np.ones((num_cons, 1)) * tMax
         t_guess = np.ones((num_cons, 1)) * ((tMax - tMin) / num_cons)
 
+        p_axis = 2
+
         match self.motion_type:
             case 'jump':
                 pass
             case 'spinning_jump':
-                pass
+                p_axis = 2
             case 'diagonal_jump':
                 t_guess = np.array([0.333, 0.666, 0.333])
+                p_axis = 2
             case 'barrel_roll':
-                pass
+                p_axis = 1
             case 'backflip':
-                pass
+                p_axis = 0
             case _:
                 print('ERROR!!!!!!!!!!!!! No such acrobatic preset exists.')
 
@@ -211,7 +218,50 @@ class MotionProfile:
         self.t_imax = t_imax
         self.t_guess = t_guess
 
-    def generate_guesses(self, mass, g_accel, r, p_feet_bar, p_feet0, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
+        self.p_axis = p_axis
+
+        DT = SX.sym('DT')
+        x1_l = SX.sym('x1_l_ref')
+        x2_l = SX.sym('x2_l_ref')
+        u1_l = SX.sym('u1_l_ref')
+        x_l = vertcat(x1_l, x2_l)
+        u_l = vertcat(u1_l)
+        xdot_l = vertcat(x2_l, u1_l)
+        X0_l = SX.sym('X0_l', 2)
+        U_l = SX.sym('U_l')
+        X_l = X0_l
+        f1 = Function('f1_ref', [x_l, u_l, DT], [xdot_l, DT])
+
+        x1_a = SX.sym('x1_a_ref', 3, 3)
+        x2_a = SX.sym('x2_a_ref', 3, 1)
+        u_a = SX.sym('u1_a_ref', 3, 1)
+        xdot1_a = mtimes(x1_a, skew(x2_a))
+        # xdot2_a = mtimes(np.linalg.inv(inertia), (mtimes(transpose(x1_a), u_a) - cross(x2_a, mtimes(inertia, x2_a))))
+        xdot2_a = u_a
+        U_a = SX.sym('U_a', 3, 1)
+        X0_a1 = SX.sym('X0_a1', 3, 3)
+        X0_a2 = SX.sym('X0_a2', 3, 1)
+        X_a1 = X0_a1
+        X_a2 = X0_a2
+        f2 = Function('f2_ref', [x1_a, x2_a, u_a, DT], [xdot1_a, xdot2_a, DT])
+
+        for j in range(self.M):
+            k1_l, DT = f1(X_l, U_l, DT)
+            k2_l, DT = f1(X_l + DT / 2 * k1_l, U_l, DT)
+            k3_l, DT = f1(X_l + DT / 2 * k2_l, U_l, DT)
+            k4_l, DT = f1(X_l + DT * k3_l, U_l, DT)
+            X_l = X_l + DT / 6 * (k1_l + 2 * k2_l + 2 * k3_l + k4_l)
+
+            k1_a1, k1_a2, DT = f2(X_a1, X_a2, U_a, DT)
+            k2_a1, k2_a2, DT = f2(X_a1 + DT / 2 * k1_a1, X_a2 + DT / 2 * k1_a2, U_a, DT)
+            k3_a1, k3_a2, DT = f2(X_a1 + DT / 2 * k2_a1, X_a2 + DT / 2 * k2_a2, U_a, DT)
+            k4_a1, k4_a2, DT = f2(X_a1 + DT * k3_a1, X_a2 + DT * k3_a2, U_a, DT)
+            X_a1 = X_a1 + DT / 6 * (k1_a1 + 2 * k2_a1 + 2 * k3_a1 + k4_a1)
+            X_a2 = X_a2 + DT / 6 * (k1_a2 + 2 * k2_a2 + 2 * k3_a2 + k4_a2)
+        self.d_integrator = Function('d_integrator', [X0_l, U_l, DT], [X_l], ['x0', 'u', 'dt'], ['xf'])
+        self.rot_integrator = Function('rot_integrator', [X0_a1, X0_a2, U_a, DT], [X_a1, X_a2], ['x01', 'x02', 'u', 'dt'], ['xf1', 'xf2'])
+
+    def generate_guesses(self, mass, g_accel, r, p_feet0, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
                          p_bodyf, Rf):
         # Initialize the initial guess matrices
         self.p_guess = np.hstack((p_body0[:, None], np.zeros((3, self.cons.num_steps - 2)), p_bodyf[:, None]))
@@ -220,7 +270,10 @@ class MotionProfile:
         self.f_ref = np.zeros((3, 4, self.cons.num_steps))
         self.Omega_guess = np.hstack((Omega0[:, None], np.zeros((3, self.cons.num_steps - 1))))
         self.DOmega_guess = np.hstack((DOmega0[:, None], np.zeros((3, self.cons.num_steps - 1))))
-        tmp_guess = self.t_guess
+
+        # # Reference trajectory (used for non-principle axis)
+        slerp = Slerp([0, self.cons.num_steps], rp.concatenate([rp.from_matrix(R0), rp.from_matrix(Rf)]))
+        self.R_ref = slerp(np.linspace(0, self.cons.num_steps, self.cons.num_steps)).as_matrix()
 
         # Find time of liftoff for the initial guess
         it = None
@@ -229,25 +282,6 @@ class MotionProfile:
                 break
         t_lo = self.t_guess.cumsum()[it - 1]
         lo_steps = np.array(self.cons.step_list).cumsum()[it - 1]
-
-        DT = SX.sym('DT')
-        x1 = SX.sym('x1_ref')
-        x2 = SX.sym('x2_ref')
-        u1 = SX.sym('u1_ref')
-        x = vertcat(x1, x2)
-        u = vertcat(u1)
-        xdot = vertcat(x2, u1)
-        f1 = Function('f1_ref', [x, u, DT], [xdot, DT])
-        X0 = SX.sym('X0', 2)
-        U = SX.sym('U')
-        X = X0
-        for j in range(self.M):
-            k1, DT = f1(X, U, DT)
-            k2, DT = f1(X + DT / 2 * k1, U, DT)
-            k3, DT = f1(X + DT / 2 * k2, U, DT)
-            k4, DT = f1(X + DT * k3, U, DT)
-            X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
-        F1 = Function('F', [X0, U, DT], [X], ['x0', 'u', 'dt'], ['xf'])
 
         # Find z-component of the acceleration reference
         t = 0
@@ -265,7 +299,7 @@ class MotionProfile:
             if k == 0:
                 self.acc_ref[2, k] = (self.beta * grf / mass)
             self.acc_ref[2, k + 1] = ddp_body
-            Fk1 = F1(x0=[p_body_k, dp_body_k], u=ddp_body, dt=dt / self.M)
+            Fk1 = self.d_integrator(x0=[p_body_k, dp_body_k], u=ddp_body, dt=dt / self.M)
             self.p_guess[2, k + 1] = Fk1['xf'][0]
             self.dp_guess[2, k + 1] = Fk1['xf'][1]
         self.acc_ref[2, lo_steps: self.cons.num_steps] = \
@@ -282,16 +316,19 @@ class MotionProfile:
         if t_[0] < 0:
             t_fl = t_[1]
         self.t_guess[it] = t_fl
-        t_la = self.t_guess.sum()
-        avg_acc = np.array(2 * (p_bodyf[0:2] - self.p_guess[0:2, 0]) / (np.power(t_lo, 2) + (2 * t_fl * t_lo)))
-        # print(self.t_guess)
-        # print(avg_acc)
+        avg_lin_acc = np.array(2 * (p_bodyf[0:2] - self.p_guess[0:2, 0]) / (np.power(t_lo, 2) + (2 * t_fl * t_lo)))
+        if self.p_axis != 1:
+            e0 = rp.from_matrix(R0).as_euler('xyz')
+            ef = rp.from_matrix(Rf).as_euler('xyz')
+        else:
+            e0 = np.zeros(3, 1)
+            ef = np.zeros(3, 1)
 
-        # r = (2 * avg_acc) / t_la
-        r = avg_acc
+        avg_ang_acc = np.array(2 * (ef - e0) / (np.power(t_lo, 2) + (2 * t_fl * t_lo)))
+
         # print(self.t_guess)
-        # print(avg_acc)
-        # print(r)
+        # print(avg_lin_acc)
+        # print(avg_ang_acc)
 
         # Integrate the xy-component of the acceleration references to get the position and velocity reference
         t = 0
@@ -300,39 +337,46 @@ class MotionProfile:
             dt = self.t_guess[i] / self.cons.step_list[i]
             p_body_k = self.p_guess[:, k]
             dp_body_k = self.dp_guess[:, k]
+            R_k = self.R_ref[k]
+            Omega_k = self.Omega_guess[:, k]
             if k < lo_steps:
-                self.acc_ref[0:2, k] = r
-            # self.acc_ref[0:2, k] = (t_la / t_lo) * r * t
+                self.acc_ref[0:2, k] = avg_lin_acc
+                self.DOmega_guess[:, k] = avg_ang_acc
             ddp_body = self.acc_ref[:, k]
+            DOmega = self.DOmega_guess[:, k]
             t = t + dt
-            Fk1x = F1(x0=[p_body_k[0], dp_body_k[0]], u=ddp_body[0], dt=dt / self.M)
-            Fk1y = F1(x0=[p_body_k[1], dp_body_k[1]], u=ddp_body[1], dt=dt / self.M)
-            Fk1z = F1(x0=[p_body_k[2], dp_body_k[2]], u=ddp_body[2], dt=dt / self.M)
-            p_body_next = np.reshape([Fk1x['xf'][0], Fk1y['xf'][0], Fk1z['xf'][0]], (3,))
-            dp_body_next = np.reshape([Fk1x['xf'][1], Fk1y['xf'][1], Fk1z['xf'][1]], (3,))
+            Fp1x = self.d_integrator(x0=[p_body_k[0], dp_body_k[0]], u=ddp_body[0], dt=dt / self.M)
+            Fp1y = self.d_integrator(x0=[p_body_k[1], dp_body_k[1]], u=ddp_body[1], dt=dt / self.M)
+            Fp1z = self.d_integrator(x0=[p_body_k[2], dp_body_k[2]], u=ddp_body[2], dt=dt / self.M)
+            p_body_next = np.reshape([Fp1x['xf'][0], Fp1y['xf'][0], Fp1z['xf'][0]], (3,))
+            dp_body_next = np.reshape([Fp1x['xf'][1], Fp1y['xf'][1], Fp1z['xf'][1]], (3,))
             self.p_guess[:, k + 1] = p_body_next
             self.dp_guess[:, k + 1] = dp_body_next
 
             clegs = self.cons.contact_list[i][0] + self.cons.contact_list[i][1] + \
                     self.cons.contact_list[i][2] + self.cons.contact_list[i][3]
+            # tau = np.zeros((3, 1))
             if clegs > 0:
-                tmp = np.array([0, 0, self.acc_ref[2, k]])
-                tmp = self.acc_ref[:, k]
-                self.f_ref[:, 0, k] = (self.cons.contact_list[i][0] / clegs) * (tmp + g_accel) * mass
-                self.f_ref[:, 1, k] = (self.cons.contact_list[i][1] / clegs) * (tmp + g_accel) * mass
-                self.f_ref[:, 2, k] = (self.cons.contact_list[i][2] / clegs) * (tmp + g_accel) * mass
-                self.f_ref[:, 3, k] = (self.cons.contact_list[i][3] / clegs) * (tmp + g_accel) * mass
+                F_0_k = (self.cons.contact_list[i][0] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                F_1_k = (self.cons.contact_list[i][1] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                F_2_k = (self.cons.contact_list[i][2] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                F_3_k = (self.cons.contact_list[i][3] / clegs) * (self.acc_ref[:, k] + g_accel) * mass
+                self.f_ref[:, 0, k] = F_0_k
+                self.f_ref[:, 1, k] = F_1_k
+                self.f_ref[:, 2, k] = F_2_k
+                self.f_ref[:, 3, k] = F_3_k
+                # tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k), F_0_k*10) + \
+                #             cross(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k), F_1_k*10) + \
+                #             cross(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k), F_2_k*10) + \
+                #             cross(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k), F_3_k*10)
+            Fa1 = self.rot_integrator(x01=R_k, x02=Omega_k, u=DOmega, dt=dt / self.M)
+            self.R_ref[k + 1] = Fa1['xf1']
+            self.Omega_guess[:, k + 1] = np.reshape([Fa1['xf2']], (3,))
 
         # print(self.p_guess[0])
         # print(self.dp_guess)
         # print(self.acc_ref[0, :])
         # print(self.f_ref[:, 2, :])
-
-        # self.t_guess = tmp_guess
-
-        # Reference Trajectory
-        slerp = Slerp([0, self.cons.num_steps], rp.concatenate([rp.from_matrix(R0), rp.from_matrix(Rf)]))
-        self.R_ref = slerp(np.linspace(0, self.cons.num_steps, self.cons.num_steps)).as_matrix()
 
 
 def approximate_exp_a(a, deg):
@@ -452,7 +496,7 @@ p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), 
 # Roughly what type of action do you want the robot to take?
 # This only influences the initial guess and some tuning parameters to make the program converge better
 # ['jump', 'spinning_jump', 'diagonal_jump', 'barrel_roll', 'backflip']
-mp = MotionProfile('spinning_jump', step_list, mass, g_accel, r, p_feet_bar, p_feet0, f_max, p_body0, dp_body0, Omega0,
+mp = MotionProfile('spinning_jump', step_list, mass, inertia, g_accel, r, p_feet0, f_max, p_body0, dp_body0, Omega0,
                    DOmega0, R0, p_bodyf, Rf)
 
 # GRF limits
@@ -521,9 +565,7 @@ constraints.add_general_constraints(sum1(T), [mp.tMin], [mp.tMax])
 constraints.add_design_constraints(T, mp.t_imin,
                                    mp.t_imax,
                                    mp.t_guess, 'T')
-# Rtest = SX.sym('R_test', 3, 3)
-# print(reshape(Rtest, (9, 1)))
-# print(np.reshape(Rf, (9, 1)))
+
 R_k = R0
 for k in range(mp.cons.num_steps):
     i = mp.cons.get_current_phase(k)
@@ -548,25 +590,6 @@ for k in range(mp.cons.num_steps):
         F_2 = vertcat(F_2, MX.sym('F_2_k{}'.format(k), 3, 1))
     if mp.cons.contact_list[mp.cons.get_current_phase(k)][3]:
         F_3 = vertcat(F_3, MX.sym('F_3_k{}'.format(k), 3, 1))
-
-    # DT = SX.sym('DT')
-    # x1 = SX.sym('x1_ref')
-    # x2 = SX.sym('x2_ref')
-    # u1 = SX.sym('u1_ref')
-    # x = vertcat(x1, x2)
-    # u = vertcat(u1)
-    # xdot = vertcat(x2, u1)
-    # f1 = Function('f1_ref', [x, u, DT], [xdot, DT])
-    # X0 = SX.sym('X0', 2)
-    # U = SX.sym('U')
-    # X = X0
-    # for j in range(self.M):
-    #     k1, DT = f1(X, U, DT)
-    #     k2, DT = f1(X + DT / 2 * k1, U, DT)
-    #     k3, DT = f1(X + DT / 2 * k2, U, DT)
-    #     k4, DT = f1(X + DT * k3, U, DT)
-    #     X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
-    # F1 = Function('F', [X0, U, DT], [X], ['x0', 'u', 'dt'], ['xf'])
 
 J = 0
 for k in range(mp.cons.num_steps):
