@@ -106,6 +106,7 @@ class MotionProfile:
         self.eOmega = None
         self.eF = None
         self.eR = None
+        self.eP = None
         self.beta = None
         self.gamma = None
         self.tMin = None
@@ -144,6 +145,9 @@ class MotionProfile:
 
         # Rotation error cost weight
         eR = 1e-3
+
+        # Final position error cost weight
+        eP = 1e-20
 
         # Scaling parameter for initial trajectory guess
         beta = -0.105
@@ -212,6 +216,7 @@ class MotionProfile:
         self.eOmega = eOmega
         self.eF = eF
         self.eR = eR
+        self.eP = eP
         self.beta = beta
         self.gamma = gamma
         self.tMin = tMin
@@ -723,6 +728,8 @@ for k in range(mp.cons.num_steps):
     J = J + (mp.eOmega * mtimes(transpose(Omega_k), Omega_k))
     J = J + (mp.eF * mtimes(transpose(grf), grf))
     J = J + (mp.eR * mtimes(transpose(e_R_k), e_R_k))
+    if k == mp.cons.num_steps - 1:
+        J = J + (mp.eP * mtimes(transpose(p_bodyf - p_body_k), (p_bodyf - p_body_k)))
 
 x = constraints.w
 lbx = constraints.lbw
