@@ -326,7 +326,7 @@ class MotionProfile:
             e0 = np.array([e0[1], e0[0], e0[2]])
             # ef = np.array([ef[1], ef[0], ef[2]])
             e0 = np.array([0, 0, 0])
-            ef = np.array([0, -2*pi, 0])
+            ef = np.array([0, -2 * pi, 0])
         else:
             print('Not ready for this yet')
             e0 = np.zeros(3, 1)
@@ -339,7 +339,7 @@ class MotionProfile:
         # print(avg_ang_acc)
 
         # r_l = np.array((p_bodyf[0:2] - p_body0[0:2]) / ((t_fl*np.power(t_lo, 3)/3) + np.power(t_lo, 4)/12))
-        r_a = np.array((ef - e0) / ((t_fl*np.power(t_lo, 3)/3) + np.power(t_lo, 4)/12))
+        r_a = np.array((ef - e0) / ((t_fl * np.power(t_lo, 3) / 3) + np.power(t_lo, 4) / 12))
 
         # Integrate the xy-component of the acceleration references to get the position and velocity reference
         t = 0
@@ -521,9 +521,9 @@ f_bounds = np.array([[-inf, inf],
 
 # COM bounding constraint. Ideally you would set this to some section of a
 # tube each timestep within you want the trajectory to lie
-p_body_bounds = np.array([[-0.375, 1],
+p_body_bounds = np.array([[-inf, inf],
                           [-0.1, 0.1],
-                          [0.025, inf]])
+                          [0, inf]])
 
 # Velocity bounds to make the problem more solvable
 dp_body_bounds = np.array([[-inf, inf],
@@ -638,13 +638,8 @@ for k in range(mp.cons.num_steps):
 
         if k != mp.cons.num_steps - 1:
             # Add body bounding box constraints
-            if i == mp.cons.num_cons - 1:
-                p_interp = (k - mp.cons.cum_steps[i - 1]) * (p_bodyf - p_body0) / mp.cons.step_list[i]
-                constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
-                                                   mp.p_guess[:, k], 'p_body')
-            else:
-                constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
-                                                   mp.p_guess[:, k], 'p_body')
+            constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
+                                               mp.p_guess[:, k], 'p_body')
 
     # Add friction cone, GRF, and foot position constraints to each leg
     grf = np.zeros((3, 1))
@@ -655,42 +650,38 @@ for k in range(mp.cons.num_steps):
         # GRF on each foot (3x1)
         F_0_k = F_0[3 * k: 3 * (k + 1)]
         grf = grf + F_0_k
-        tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k), F_0_k)
+        tau = tau + cross(p_feet0[:, 0] - p_body_k, F_0_k)
         constraints.add_general_constraints(fabs(F_0_k[0] / F_0_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_0_k[1] / F_0_k[2]), [0], [mu])
-        constraints.add_general_constraints(
-            norm_2(mtimes(transpose(R0), p_feet0[:, 0]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 0]),
-            [0], [r])
+        constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feet0[:, 0] - p_body_k) - p_feet_bar[:, 0]),
+                                            [0], [r])
         constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 0, k], 'F_0')
     if mp.cons.contact_list[i][1]:
         F_1_k = F_1[3 * k: 3 * (k + 1)]
         grf = grf + F_1_k
-        tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k), F_1_k)
+        tau = tau + cross(p_feet0[:, 1] - p_body_k, F_1_k)
         constraints.add_general_constraints(fabs(F_1_k[0] / F_1_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_1_k[1] / F_1_k[2]), [0], [mu])
-        constraints.add_general_constraints(
-            norm_2(mtimes(transpose(R0), p_feet0[:, 1]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 1]),
-            [0], [r])
+        constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feet0[:, 1] - p_body_k) - p_feet_bar[:, 1]),
+                                            [0], [r])
         constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 1, k], 'F_1')
     if mp.cons.contact_list[i][2]:
         F_2_k = F_2[3 * k: 3 * (k + 1)]
         grf = grf + F_2_k
-        tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k), F_2_k)
+        tau = tau + cross(p_feet0[:, 2] - p_body_k, F_2_k)
         constraints.add_general_constraints(fabs(F_2_k[0] / F_2_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_2_k[1] / F_2_k[2]), [0], [mu])
-        constraints.add_general_constraints(
-            norm_2(mtimes(transpose(R0), p_feet0[:, 2]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 2]),
-            [0], [r])
+        constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feet0[:, 2] - p_body_k) - p_feet_bar[:, 2]),
+                                            [0], [r])
         constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 2, k], 'F_2')
     if mp.cons.contact_list[i][3]:
         F_3_k = F_3[3 * k: 3 * (k + 1)]
         grf = grf + F_3_k
-        tau = tau + cross(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k), F_3_k)
+        tau = tau + cross(p_feet0[:, 3] - p_body_k, F_3_k)
         constraints.add_general_constraints(fabs(F_3_k[0] / F_3_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_3_k[1] / F_3_k[2]), [0], [mu])
-        constraints.add_general_constraints(
-            norm_2(mtimes(transpose(R0), p_feet0[:, 3]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, 3]),
-            [0], [r])
+        constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feet0[:, 3] - p_body_k) - p_feet_bar[:, 3]),
+                                            [0], [r])
         constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 3, k], 'F_3')
 
     # Discrete dynamics
@@ -705,7 +696,7 @@ for k in range(mp.cons.num_steps):
         dp_body_next = dp_body_k + ddp_body * dt
         Omega_next = Omega_k + DOmega_k * dt
         DOmega_next = mtimes(np.linalg.inv(inertia),
-                             (tau - cross(Omega_k, mtimes(inertia, Omega_k))))
+                             (mtimes(transpose(R_k), tau) - cross(Omega_k, mtimes(inertia, Omega_k))))
 
         constraints.add_general_constraints(p_body_k1 - p_body_next, np.zeros((3, 1)), np.zeros((3, 1)))
         constraints.add_general_constraints(Omega_k1 - Omega_next, np.zeros((3, 1)), np.zeros((3, 1)))
@@ -724,9 +715,8 @@ for k in range(mp.cons.num_steps):
         constraints.add_general_constraints(reshape(transpose(R_k), (9, 1)), np.reshape(Rf, (9, 1)),
                                             np.reshape(Rf, (9, 1)))
         for leg in range(4):
-            constraints.add_general_constraints(
-                norm_2(mtimes(transpose(Rf), p_feetf[:, leg]) - mtimes(transpose(R_k), p_body_k) - p_feet_bar[:, leg]),
-                [0], [r])
+            constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feetf[:, leg] - p_body_k) -
+                                                       p_feet_bar[:, leg]), [0], [r])
 
     # Objective Function
     e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), l_terms))
