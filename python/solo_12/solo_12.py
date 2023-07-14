@@ -332,11 +332,14 @@ class MotionProfile:
             e0 = np.zeros(3, 1)
             ef = np.zeros(3, 1)
 
-        avg_ang_acc = np.array(2 * (ef - e0) / (np.power(t_lo, 2) + (2 * t_fl * t_lo)))
+        # avg_ang_acc = np.array(2 * (ef - e0) / (np.power(t_lo, 2) + (2 * t_fl * t_lo)))
 
         # print(self.t_guess)
         # print(avg_lin_acc)
         # print(avg_ang_acc)
+
+        # r_l = np.array((p_bodyf[0:2] - p_body0[0:2]) / ((t_fl*np.power(t_lo, 3)/3) + np.power(t_lo, 4)/12))
+        r_a = np.array((ef - e0) / ((t_fl*np.power(t_lo, 3)/3) + np.power(t_lo, 4)/12))
 
         # Integrate the xy-component of the acceleration references to get the position and velocity reference
         t = 0
@@ -349,7 +352,7 @@ class MotionProfile:
             Omega_k = self.Omega_guess[:, k]
             if k < lo_steps:
                 self.acc_ref[0:2, k] = avg_lin_acc
-                self.DOmega_guess[:, k] = avg_ang_acc
+                self.DOmega_guess[:, k] = r_a * np.power(t, 2)
             ddp_body = self.acc_ref[:, k]
             DOmega = self.DOmega_guess[:, k]
             t = t + dt
@@ -472,7 +475,7 @@ mu = 0.7
 
 # Maximum ground reaction force in the Z direction
 # (friction constraints imply the force in the X and Y direction have to be less than this)
-f_max = 25
+f_max = 40
 
 # Degree of Taylor series approximation for matrix exponential
 e_terms = 8

@@ -16,9 +16,9 @@ hipLinkLength = 0.160;
 kneeLinkY_offset = 0.04745;
 kneeLinkLength = 0.1675;
 mass = 2.50000279;
-bounds = [deg2rad(-90), deg2rad(90);
-          deg2rad(-175), deg2rad(175);
-          deg2rad(-175), deg2rad(175)];
+bounds = [deg2rad(-180), deg2rad(180);
+          deg2rad(-180), deg2rad(180);
+          deg2rad(-180), deg2rad(180)];
 PM = utils.tdh(pi/2, 0, bodyHalfWidth, -pi/2) * ...
      utils.tdh(0, -bodyHalfLength, 0, 0);
 omegaList = [[0;0;1], [1;0;0], [1;0;0]];
@@ -176,13 +176,13 @@ end
 %% Visualization
 close all;
 
-slowDown = 1;
+slowDown = 5;
 rates = {};
 t = zeros(Nc, 1);
 it = 1;
 for i = 1 : n_p
     dt = T_opt(i) / step_list(i);
-    rates = {rates{:}, rateControl(slowDown/dt)};
+    rates = {rates{:}, rateControl(1/(dt*slowDown))};
     for k = 1 : step_list(i)
         if it ~= 1
             t(it, 1) = t(it-1, 1) + dt;
@@ -200,7 +200,7 @@ if animate == true
         qcj = [qc;qj];
         initVisualizer(robot, qcj);
         
-        plotTransforms(p_qref, R_qref)
+        % plotTransforms(p_qref, R_qref)
         plts = [];
         while true
             for k = 1 : Nc
@@ -220,7 +220,7 @@ if animate == true
         qcj = [qc;qj];
         initVisualizer(robot, qcj);
         
-        plotTransforms(p_qref, R_qref)
+        % plotTransforms(p_qref, R_qref)
         plts = [];
         while true
             for k = 1 : Nc
@@ -370,45 +370,45 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     p_body0, old_plts)
     p_body = q(1:3);
     q = [q(1:6);
-        -q(7);q(8:9);
-        q(10:12);
-        -q(13:15);
-        q(16);-q(17:18)];
+        q(7);-q(8:9);
+        -q(10:12);
+        q(13:15);
+        -q(16);q(17:18)];
     show(robot, q, "PreservePlot", false, "FastUpdate", true, ...
-        "Frames","on");
+        "Frames","off");
     plts = [];
-    for leg = 1 : 4
-        color = 'k';
-        switch (leg)
-            case 1
-                color = 'r';
-            case 2
-                color = 'g';
-            case 3
-                color = 'b';
-            case 4
-                color = 'y';
-            otherwise
-                disp("ERROR")
-        end
-        plts = [plts; quiver3(p_feet(1,leg),p_feet(2,leg), ...
-            p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
-            "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
-            "ShowArrowHead","on")];
-        tr = p_body + R*p_feet_bar(:,leg);
-        [x,y,z] = sphere;
-        x = x*r + tr(1);
-        y = y*r + tr(2);
-        z = z*r + tr(3);
-        h = surfl(x,y,z);
-        set(h, 'FaceAlpha', 0.25)
-        plts = [plts; h];
-        if ~isempty(old_plts)
-            delete(old_plts(leg));
-            delete(old_plts(leg+4));
-        end
-    end
-    drawnow limitrate;
+    % for leg = 1 : 4
+    %     color = 'k';
+    %     switch (leg)
+    %         case 1
+    %             color = 'r';
+    %         case 2
+    %             color = 'g';
+    %         case 3
+    %             color = 'b';
+    %         case 4
+    %             color = 'y';
+    %         otherwise
+    %             disp("ERROR")
+    %     end
+    %     plts = [plts; quiver3(p_feet(1,leg),p_feet(2,leg), ...
+    %         p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
+    %         "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
+    %         "ShowArrowHead","on")];
+    %     tr = p_body + R*p_feet_bar(:,leg);
+    %     [x,y,z] = sphere;
+    %     x = x*r + tr(1);
+    %     y = y*r + tr(2);
+    %     z = z*r + tr(3);
+    %     h = surfl(x,y,z);
+    %     set(h, 'FaceAlpha', 0.25)
+    %     plts = [plts; h];
+    %     if ~isempty(old_plts)
+    %         delete(old_plts(leg));
+    %         delete(old_plts(leg+4));
+    %     end
+    % end
+    % drawnow;
 end
 
 function i = getCurrentPhase(k, Nch)
