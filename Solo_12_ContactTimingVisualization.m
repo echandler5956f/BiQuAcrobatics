@@ -2,7 +2,7 @@
 
 clc; close all
 
-animate = false;
+animate = true;
 visualizeReference = false;
 
 % Kinematics
@@ -176,7 +176,7 @@ end
 %% Visualization
 close all;
 
-slowDown = 5;
+slowDown = 1;
 rates = {};
 t = zeros(Nc, 1);
 it = 1;
@@ -408,7 +408,7 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     %         delete(old_plts(leg+4));
     %     end
     % end
-    % drawnow;
+    drawnow;
 end
 
 function i = getCurrentPhase(k, Nch)

@@ -653,7 +653,7 @@ for k in range(mp.cons.num_steps):
         tau = tau + cross(p_feet0[:, 0] - p_body_k, F_0_k)
         constraints.add_general_constraints(fabs(F_0_k[0] / F_0_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_0_k[1] / F_0_k[2]), [0], [mu])
-        constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feet0[:, 0] - p_body_k) - p_feet_bar[:, 0]),
+        constraints.add_general_constraints(norm_2(mtimes(R_k, p_feet0[:, 0] - p_body_k) - p_feet_bar[:, 0]),
                                             [0], [r])
         constraints.add_design_constraints(F_0_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 0, k], 'F_0')
     if mp.cons.contact_list[i][1]:
@@ -662,7 +662,7 @@ for k in range(mp.cons.num_steps):
         tau = tau + cross(p_feet0[:, 1] - p_body_k, F_1_k)
         constraints.add_general_constraints(fabs(F_1_k[0] / F_1_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_1_k[1] / F_1_k[2]), [0], [mu])
-        constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feet0[:, 1] - p_body_k) - p_feet_bar[:, 1]),
+        constraints.add_general_constraints(norm_2(mtimes(R_k, p_feet0[:, 1] - p_body_k) - p_feet_bar[:, 1]),
                                             [0], [r])
         constraints.add_design_constraints(F_1_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 1, k], 'F_1')
     if mp.cons.contact_list[i][2]:
@@ -671,7 +671,7 @@ for k in range(mp.cons.num_steps):
         tau = tau + cross(p_feet0[:, 2] - p_body_k, F_2_k)
         constraints.add_general_constraints(fabs(F_2_k[0] / F_2_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_2_k[1] / F_2_k[2]), [0], [mu])
-        constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feet0[:, 2] - p_body_k) - p_feet_bar[:, 2]),
+        constraints.add_general_constraints(norm_2(mtimes(R_k, p_feet0[:, 2] - p_body_k) - p_feet_bar[:, 2]),
                                             [0], [r])
         constraints.add_design_constraints(F_2_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 2, k], 'F_2')
     if mp.cons.contact_list[i][3]:
@@ -680,7 +680,7 @@ for k in range(mp.cons.num_steps):
         tau = tau + cross(p_feet0[:, 3] - p_body_k, F_3_k)
         constraints.add_general_constraints(fabs(F_3_k[0] / F_3_k[2]), [0], [mu])
         constraints.add_general_constraints(fabs(F_3_k[1] / F_3_k[2]), [0], [mu])
-        constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feet0[:, 3] - p_body_k) - p_feet_bar[:, 3]),
+        constraints.add_general_constraints(norm_2(mtimes(R_k, p_feet0[:, 3] - p_body_k) - p_feet_bar[:, 3]),
                                             [0], [r])
         constraints.add_design_constraints(F_3_k, f_bounds[:, 0], f_bounds[:, 1], mp.f_ref[:, 3, k], 'F_3')
 
@@ -715,7 +715,7 @@ for k in range(mp.cons.num_steps):
         constraints.add_general_constraints(reshape(transpose(R_k), (9, 1)), np.reshape(Rf, (9, 1)),
                                             np.reshape(Rf, (9, 1)))
         for leg in range(4):
-            constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feetf[:, leg] - p_body_k) -
+            constraints.add_general_constraints(norm_2(mtimes(R_k, p_feetf[:, leg] - p_body_k) -
                                                        p_feet_bar[:, leg]), [0], [r])
 
     # Objective Function
