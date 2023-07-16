@@ -373,10 +373,10 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     p_body0, old_plts)
     p_body = q(1:3);
     q = [q(1:6);
-        q(7);-q(8:9);
-        -q(10:12);
-        q(13:15);
-        -q(16);q(17:18)];
+        -q(7);q(8:9);
+        q(10:12);
+        -q(13:15);
+        q(16);-q(17:18)];
     show(robot, q, "PreservePlot", false, "FastUpdate", true, ...
         "Frames","off");
     plts = [];
