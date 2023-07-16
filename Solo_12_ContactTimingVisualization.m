@@ -17,9 +17,9 @@ if true
     kneeLinkY_offset = 0.04745;
     kneeLinkLength = 0.1675;
     mass = 2.50000279;
-    bounds = [deg2rad(-180), deg2rad(180);
-              deg2rad(-180), deg2rad(180);
-              deg2rad(-180), deg2rad(180)];
+    bounds = [deg2rad(-360), deg2rad(360);
+              deg2rad(-360), deg2rad(360);
+              deg2rad(-360), deg2rad(360)];
     PM = utils.tdh(pi/2, 0, bodyHalfWidth, -pi/2) * ...
          utils.tdh(0, -bodyHalfLength, 0, 0);
     omegaList = [[0;0;1], [1;0;0], [1;0;0]];
@@ -148,6 +148,7 @@ for k = 1 : Nc
         p_feet_opt(:,4,k) = p_feetf(:,4);
     end
     F_opt(:,:,k) = F_k;
+    F_ref(:,:,k) = F_k_ref;
     if k <= Nch(2)
         v = v + (([sum(F_k(1,:));sum(F_k(2,:));sum(F_k(3,:))]/mass) - ...
             [0;0;9.81]) * (T_opt(i)/step_list(i));
@@ -410,7 +411,7 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     %         delete(old_plts(leg+4));
     %     end
     % end
-    drawnow;
+    % drawnow;
 end
 
 function i = getCurrentPhase(k, Nch)
