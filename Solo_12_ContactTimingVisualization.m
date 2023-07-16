@@ -380,38 +380,38 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     show(robot, q, "PreservePlot", false, "FastUpdate", true, ...
         "Frames","off");
     plts = [];
-    % for leg = 1 : 4
-    %     color = 'k';
-    %     switch (leg)
-    %         case 1
-    %             color = 'r';
-    %         case 2
-    %             color = 'g';
-    %         case 3
-    %             color = 'b';
-    %         case 4
-    %             color = 'y';
-    %         otherwise
-    %             disp("ERROR")
-    %     end
-    %     plts = [plts; quiver3(p_feet(1,leg),p_feet(2,leg), ...
-    %         p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
-    %         "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
-    %         "ShowArrowHead","on")];
-    %     tr = p_body + R*p_feet_bar(:,leg);
-    %     [x,y,z] = sphere;
-    %     x = x*r + tr(1);
-    %     y = y*r + tr(2);
-    %     z = z*r + tr(3);
-    %     h = surfl(x,y,z);
-    %     set(h, 'FaceAlpha', 0.25)
-    %     plts = [plts; h];
-    %     if ~isempty(old_plts)
-    %         delete(old_plts(leg));
-    %         delete(old_plts(leg+4));
-    %     end
-    % end
-    % drawnow;
+    for leg = 1 : 4
+        color = 'k';
+        switch (leg)
+            case 1
+                color = 'r';
+            case 2
+                color = 'g';
+            case 3
+                color = 'b';
+            case 4
+                color = 'y';
+            otherwise
+                disp("ERROR")
+        end
+        plts = [plts; quiver3(p_feet(1,leg),p_feet(2,leg), ...
+            p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
+            "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
+            "ShowArrowHead","on")];
+        tr = p_body + R*p_feet_bar(:,leg);
+        [x,y,z] = sphere;
+        x = x*r + tr(1);
+        y = y*r + tr(2);
+        z = z*r + tr(3);
+        h = surfl(x,y,z);
+        set(h, 'FaceAlpha', 0.25)
+        plts = [plts; h];
+        if ~isempty(old_plts)
+            delete(old_plts(leg));
+            delete(old_plts(leg+4));
+        end
+    end
+    drawnow;
 end
 
 function i = getCurrentPhase(k, Nch)
