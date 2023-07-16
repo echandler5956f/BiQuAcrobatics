@@ -3,5 +3,5 @@ function dldq = derivative(l,q)
     for i = 1:length(q)
         dldq(:,i) = diff(l,q(i));
     end
-    dldq = simplify(dldq);
+    dldq = dldq;
  end

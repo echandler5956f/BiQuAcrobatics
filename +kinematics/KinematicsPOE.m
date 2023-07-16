@@ -34,7 +34,7 @@ classdef KinematicsPOE < kinematics.KinematicsInterface
             for i = self.dof: -1: 1
                 fkSym = utils.MatrixExp6(utils.VecTose3(vpa([omegaList(:,i);cross(-omegaList(:,i),pList(:,i))]) * qSym(i))) * fkSym;
             end
-            fkSym = simplify(expand(PM * fkSym * M),100);
+            fkSym = PM * fkSym * M;
         end
     end
 end

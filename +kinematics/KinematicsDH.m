@@ -30,11 +30,10 @@ classdef KinematicsDH < kinematics.KinematicsInterface
         end
 
         function fkSym = getFK(self, PM, DHTable)
-            fkSym = eye(4);
+            fkSym = PM;
             for i = 1 : size(DHTable, 1)
                 fkSym = fkSym * utils.tdh(DHTable(i, 1), DHTable(i, 2), DHTable(i, 3), DHTable(i, 4));
             end
-            fkSym = simplify(expand(PM * fkSym),100);
         end
     end
 

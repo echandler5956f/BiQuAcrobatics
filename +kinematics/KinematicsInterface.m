@@ -110,7 +110,6 @@ classdef KinematicsInterface < handle
                     jSym(i, j) = utils.derivative(fkSym(i, :), qSym(j, 1));
                 end
             end
-            jSym = simplify(expand(jSym),100);
         end
 
         function jdSym = getJacobDot(self, jSym, qSym)
@@ -120,7 +119,6 @@ classdef KinematicsInterface < handle
                     jdSym(i, j) = utils.derivative(jSym(i, j), qSym(j, 1));
                 end
             end
-            jdSym = simplify(expand(jdSym),100);
         end
     end
 end

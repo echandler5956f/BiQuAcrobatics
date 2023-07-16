@@ -7,36 +7,38 @@ visualizeReference = false;
 
 % Kinematics
 
-syms q [3, 1]
-bodyHalfLength = 0.194;
-bodyHalfWidth = 0.0875;
-bodyHalfHeight = 0.025;
-abadLinkLength = 0.01295;
-hipLinkLength = 0.160;
-kneeLinkY_offset = 0.04745;
-kneeLinkLength = 0.1675;
-mass = 2.50000279;
-bounds = [deg2rad(-180), deg2rad(180);
-          deg2rad(-180), deg2rad(180);
-          deg2rad(-180), deg2rad(180)];
-PM = utils.tdh(pi/2, 0, bodyHalfWidth, -pi/2) * ...
-     utils.tdh(0, -bodyHalfLength, 0, 0);
-omegaList = [[0;0;1], [1;0;0], [1;0;0]];
-pList = [[0;0;0], [abadLinkLength; 0; 0], ...
-         [kneeLinkY_offset; hipLinkLength; 0]];
-R_home = [0,1,0;
-          0,0,-1;
-          -1,0,0];
-t_home = [abadLinkLength + kneeLinkY_offset; ...
-          hipLinkLength + kneeLinkLength;0];
-M = [R_home, t_home;
-     0, 0, 0, 1];
-kin = kinematics.KinematicsPOE(PM,M,omegaList,pList,q,bounds,6,3);
+if true
+    syms q [3, 1]
+    bodyHalfLength = 0.194;
+    bodyHalfWidth = 0.0875;
+    bodyHalfHeight = 0.025;
+    abadLinkLength = 0.01295;
+    hipLinkLength = 0.160;
+    kneeLinkY_offset = 0.04745;
+    kneeLinkLength = 0.1675;
+    mass = 2.50000279;
+    bounds = [deg2rad(-180), deg2rad(180);
+              deg2rad(-180), deg2rad(180);
+              deg2rad(-180), deg2rad(180)];
+    PM = utils.tdh(pi/2, 0, bodyHalfWidth, -pi/2) * ...
+         utils.tdh(0, -bodyHalfLength, 0, 0);
+    omegaList = [[0;0;1], [1;0;0], [1;0;0]];
+    pList = [[0;0;0], [abadLinkLength; 0; 0], ...
+             [kneeLinkY_offset; hipLinkLength; 0]];
+    R_home = [0,1,0;
+              0,0,-1;
+              -1,0,0];
+    t_home = [abadLinkLength + kneeLinkY_offset; ...
+              hipLinkLength + kneeLinkLength;0];
+    M = [R_home, t_home;
+         0, 0, 0, 1];
+    kin = kinematics.KinematicsPOE(PM,M,omegaList,pList,q,bounds,6,3);
+end
 
 % Verify kinematics
 % close all;
 % p_feet_des = [[0.225;0.175;0], zeros(3)];
-% q1 = getJointAngles(kin, [0;0;0.125], eye(3), p_feet_des,  [deg2rad(5);deg2rad(-45);deg2rad(-45);zeros(9,1)]);
+% q1 = getJointAngles(kin, [0;0;0.125], eye(3), p_feet_des, [deg2rad(5);deg2rad(-45);deg2rad(-45);zeros(9,1)]);
 % q1 = [-q1(1);q1(2:3)];
 % % q1 = [deg2rad(0);deg2rad(-45);deg2rad(110)];
 % % q1 = [deg2rad(5);deg2rad(-45);deg2rad(45)];
@@ -195,11 +197,11 @@ if animate == true
     robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
     if ~visualizeReference
         qc = [p_body_opt(:,1); transpose(rotm2eul(R_opt(:,:,1), 'ZXY'))]; % Pose
-        
+
         qj = getJointAngles(kin, p_body_opt(:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
         qcj = [qc;qj];
         initVisualizer(robot, qcj);
-        
+
         % plotTransforms(p_qref, R_qref)
         plts = [];
         while true
@@ -215,11 +217,11 @@ if animate == true
         end
     else
         qc = [p_body_guess(:,1); transpose(rotm2eul(R_ref(:,:,1), 'ZXY'))]; % Pose
-        
+
         qj = getJointAngles(kin, p_body_guess(:,1), R_ref(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
         qcj = [qc;qj];
         initVisualizer(robot, qcj);
-        
+
         % plotTransforms(p_qref, R_qref)
         plts = [];
         while true
