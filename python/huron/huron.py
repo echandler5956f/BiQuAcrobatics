@@ -1,5 +1,7 @@
 from casadi import *
 import numpy as np
+from scipy.spatial.transform import Rotation as rp
+from scipy.spatial.transform import Slerp
 
 
 class DesignField:
