@@ -2,7 +2,7 @@
 
 clc; close all
 
-animate = true;
+animate = false;
 visualizeReference = false;
 
 % Kinematics
@@ -209,7 +209,7 @@ if animate == true
             for k = 1 : Nc
                 i = getCurrentPhase(k, Nch);
                 qc = [p_body_opt(:,k); transpose(rotm2eul(R_opt(:,:,k), 'ZXY'))];
-                qj = getJointAngles(kin, p_body_opt(:,k), R_opt(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
+                qj = getJointAngles(kin, p_body_opt(:,k), R_opt(:,:,k), p_feet_opt(:,:,k), qj);
                 qcj = [qc; qj];
                 plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
                     R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts);
@@ -339,8 +339,8 @@ function qj = getJointAngles(kin, p_body_k, R_k, p_feet_k, y0)
     T_bf3 = T_wb*[p_feet_k(:,3);1];
     T_bf4 = T_wb*[p_feet_k(:,4);1];
 
-    qj = [kin.ik(legMask(T_bf1(1:3,1),1), y0(1:3));
-          kin.ik(legMask(T_bf2(1:3,1),2), y0(4:6));
+    qj = [kin.ik(legMask(T_bf1(1:3,1),1), y0(7:9));
+          kin.ik(legMask(T_bf2(1:3,1),2), y0(10:12));
           kin.ik(legMask(T_bf3(1:3,1),3), y0(7:9));
           kin.ik(legMask(T_bf4(1:3,1),4), y0(10:12))];
 end
@@ -373,45 +373,45 @@ function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
     p_body0, old_plts)
     p_body = q(1:3);
     q = [q(1:6);
-        -q(7);q(8:9);
-        q(10:12);
-        -q(13:15);
-        q(16);-q(17:18)];
+        q(7);-q(8:9);
+        -q(10:12);
+        q(13:15);
+        -q(16);q(17:18)];
     show(robot, q, "PreservePlot", false, "FastUpdate", true, ...
         "Frames","off");
     plts = [];
-    for leg = 1 : 4
-        color = 'k';
-        switch (leg)
-            case 1
-                color = 'r';
-            case 2
-                color = 'g';
-            case 3
-                color = 'b';
-            case 4
-                color = 'y';
-            otherwise
-                disp("ERROR")
-        end
-        plts = [plts; quiver3(p_feet(1,leg),p_feet(2,leg), ...
-            p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
-            "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
-            "ShowArrowHead","on")];
-        tr = p_body + R*p_feet_bar(:,leg);
-        [x,y,z] = sphere;
-        x = x*r + tr(1);
-        y = y*r + tr(2);
-        z = z*r + tr(3);
-        h = surfl(x,y,z);
-        set(h, 'FaceAlpha', 0.25)
-        plts = [plts; h];
-        if ~isempty(old_plts)
-            delete(old_plts(leg));
-            delete(old_plts(leg+4));
-        end
-    end
-    drawnow;
+    % for leg = 1 : 4
+    %     color = 'k';
+    %     switch (leg)
+    %         case 1
+    %             color = 'r';
+    %         case 2
+    %             color = 'g';
+    %         case 3
+    %             color = 'b';
+    %         case 4
+    %             color = 'y';
+    %         otherwise
+    %             disp("ERROR")
+    %     end
+    %     plts = [plts; quiver3(p_feet(1,leg),p_feet(2,leg), ...
+    %         p_feet(3,leg), F(1,leg),F(2,leg),F(3,leg), ...
+    %         "Color",color,"LineWidth",2,"AutoScaleFactor",1, ...
+    %         "ShowArrowHead","on")];
+    %     tr = p_body + R*p_feet_bar(:,leg);
+    %     [x,y,z] = sphere;
+    %     x = x*r + tr(1);
+    %     y = y*r + tr(2);
+    %     z = z*r + tr(3);
+    %     h = surfl(x,y,z);
+    %     set(h, 'FaceAlpha', 0.25)
+    %     plts = [plts; h];
+    %     if ~isempty(old_plts)
+    %         delete(old_plts(leg));
+    %         delete(old_plts(leg+4));
+    %     end
+    % end
+    % drawnow;
 end
 
 function i = getCurrentPhase(k, Nch)

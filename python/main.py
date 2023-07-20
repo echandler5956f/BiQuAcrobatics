@@ -185,6 +185,8 @@ class MotionProfile:
                 gamma = 0.075
                 contact_list = [[1, 1, 1, 1], [1, 0, 1, 0], [0, 0, 0, 0]]
             case 'backflip':
+                beta = -0.105
+                gamma = 0.4
                 contact_list = [[1, 1, 1, 1], [1, 1, 0, 0], [0, 0, 0, 0]]
 
         # Number of Contacts
@@ -289,6 +291,7 @@ class MotionProfile:
         # Reference trajectory (used for non-principle axis)
         slerp = Slerp([0, self.cons.num_steps], rp.concatenate([rp.from_matrix(R0), rp.from_matrix(Rf)]))
         self.R_ref = slerp(np.linspace(0, self.cons.num_steps, self.cons.num_steps)).as_matrix()
+        rp.from_matrix(R0).as_matrix()
 
         # Find time of liftoff for the initial guess
         it = None
@@ -479,7 +482,7 @@ inertia = np.array([[3.09249e-2, 0, 0],
 g_accel = np.array([0, 0, 9.81])
 
 # Sphere of radius r that the foot position is constrained to
-r = 0.3
+r = 0.2375
 
 # Friction coefficient
 mu = 0.7
@@ -498,52 +501,52 @@ l_terms = 8
 step_list = [30, 30, 30]
 
 # Initial States
-p_body0 = np.array([0, 0, 0.6])
+p_body0 = np.array([0, 0, 0.3])
 dp_body0 = np.array([0, 0, 0])
 Omega0 = np.array([0, 0, 0])
 DOmega0 = np.array([0, 0, 0])
-R0 = rp.from_euler('zxy', [0, 0, 0], True).as_matrix()
+R0 = rp.from_euler('zxy', [-180, 0, 0], True).as_matrix()
 
 # Final States
-p_bodyf = np.array([0, 0.2, 0.25])
-Rf = rp.from_euler('zxy', [0, 0, 0], True).as_matrix()
+p_bodyf = np.array([0.25, 0.0, 0.3])
+Rf = rp.from_euler('zxy', [-180, 0, 0], True).as_matrix()
 
 # Place the feet below the hip
 tmp = np.array([0.194, 0.1479])
-p_feet0 = foot_positions(p_body0, R0, tmp, 0.4)
+p_feet0 = foot_positions(p_body0, R0, tmp, 0.0)
 p_feetf = foot_positions(p_bodyf, Rf, tmp, 0.0)
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
 # pbar = [0.194, 0.1479, -0.16]
-pbar = [0.194, 0.1479, 0.0]
+pbar = [0.194, 0.1479, -0.16]
 p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), leg_mask(pbar, 4)]).transpose()
 
 # Roughly what type of action do you want the robot to take?
 # This only influences the initial guess and some tuning parameters to make the program converge better
 # ['jump', 'spinning_jump', 'diagonal_jump', 'barrel_roll', 'backflip']
-mp = MotionProfile('barrel_roll', step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
+mp = MotionProfile('backflip', step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
                    p_bodyf, Rf, True)
 
 # GRF limits
-f_bounds = np.array([[-0.1, 0.1],
-                     [-inf, inf],
+f_bounds = np.array([[-inf, inf],
+                     [-0.1, 0.1],
                      [0, f_max]])
 
 # COM bounding constraint. Ideally you would set this to some section of a
 # tube each timestep within you want the trajectory to lie
-p_body_bounds = np.array([[-0.1, 0.1],
-                          [-inf, inf],
-                          [0.4125, inf]])
+p_body_bounds = np.array([[-inf, inf],
+                          [-0.1, 0.1],
+                          [0, inf]])
 
 # Velocity bounds to make the problem more solvable
-dp_body_bounds = np.array([[-0.1, 0.1],
-                           [-inf, inf],
+dp_body_bounds = np.array([[-inf, inf],
+                           [-0.1, 0.1],
                            [-inf, inf]])
 
 # Angular velocity bounds to make the problem more solvable
 Omega_bounds = np.array([[-inf, inf],
-                         [-0.1, 0.1],
+                         [-inf, inf],
                          [-0.1, 0.1]])
 
 # Time derivative angular velocity bounds to make the problem more solvable
@@ -649,12 +652,8 @@ for k in range(mp.cons.num_steps):
 
         if k != mp.cons.num_steps - 1:
             # Add body bounding box constraints
-            if i != 2:
-                constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
-                                                   mp.p_guess[:, k], 'p_body')
-            else:
-                constraints.add_design_constraints(p_body_k, np.array([-0.1, -inf, 0]), np.array([0.1, inf, inf]),
-                                                   mp.p_guess[:, k], 'p_body')
+            constraints.add_design_constraints(p_body_k, p_body_bounds[:, 0], p_body_bounds[:, 1],
+                                               mp.p_guess[:, k], 'p_body')
 
     # Add friction cone, GRF, and foot position constraints to each leg
     grf = np.zeros((3, 1))
@@ -729,9 +728,9 @@ for k in range(mp.cons.num_steps):
         constraints.add_design_constraints(p_body_k, p_bodyf, p_bodyf, p_bodyf, 'p_body')
         constraints.add_general_constraints(reshape(transpose(R_k), (9, 1)), np.reshape(Rf, (9, 1)),
                                             np.reshape(Rf, (9, 1)))
-        # for leg in range(4):
-        #     constraints.add_general_constraints(norm_2(mtimes(R_k, p_feetf[:, leg] - p_body_k) -
-        #                                                p_feet_bar[:, leg]), [0], [r])
+        for leg in range(4):
+            constraints.add_general_constraints(norm_2(mtimes(R_k, p_feetf[:, leg] - p_body_k) -
+                                                       p_feet_bar[:, leg]), [0], [r])
 
     # Objective Function
     e_R_k = inv_skew(approximate_log_a(mtimes(transpose(R_ref_k), R_k), l_terms))
@@ -749,8 +748,13 @@ x0 = constraints.w0
 # Initialize an NLP solver
 nlp = {'x': x, 'f': J, 'g': constraints.g}
 
+jit_options = {"flags": ["-O3"], "verbose": True, "compiler": "gcc"}
+
 # Solver options
 opts = {"expand": True,
+        # "jit": True,
+        # "compiler": "shell",
+        # "jit_options": jit_options,
         "detect_simple_bounds": True, "warn_initial_bounds": True,
         "ipopt": {"max_iter": 1000,
                   "fixed_variable_treatment": "make_constraint",

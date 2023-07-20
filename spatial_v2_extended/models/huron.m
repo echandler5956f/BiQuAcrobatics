@@ -186,7 +186,7 @@ model = floatbase(model);
 %     zeros(1, length(time)); % l_ankle_roll
 %     zeros(1, length(time)) % r_ankle_roll
 %     ]; 
-% showmotion(model)
+showmotion(model)
 
 % xfb = [0;0;0;1;zeros(9,1)];
 % q = zeros(18,1);
