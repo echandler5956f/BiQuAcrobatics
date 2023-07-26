@@ -2,7 +2,7 @@
 
 clc; close all
 
-animate = false;
+animate = true;
 visualizeReference = false;
 
 % Kinematics

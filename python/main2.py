@@ -4,19 +4,323 @@ from scipy.spatial.transform import Rotation as rp
 from scipy.spatial.transform import Slerp
 
 
+class Contacts:
+    def __init__(self, step_list, contact_list):
+        self.num_cons = len(step_list)
+        self.step_list = step_list
+        self.num_steps = int(np.sum(step_list))
+        self.cum_steps = np.cumsum(step_list)
+        self.contact_list = contact_list
+        self.num_legs = len(self.contact_list[0])
+
+    def get_current_phase(self, k):
+        i = 0
+        for j in range(self.num_cons):
+            i = i + (k >= self.cum_steps[j])
+        return i
+
+
+class Collocation:
+    def __init__(self, degree):
+        # Degree of interpolating polynomial
+        self.degree = degree
+
+        # Get collocation points
+        tau_root = np.append(0, collocation_points(self.degree, 'legendre'))
+
+        # Coefficients of the collocation equation
+        self.C = np.zeros((self.degree + 1, self.degree + 1))
+
+        # Coefficients of the continuity equation
+        self.D = np.zeros(self.degree + 1)
+
+        # Coefficients of the quadrature function
+        self.B = np.zeros(self.degree + 1)
+
+        # Construct polynomial basis
+        for j in range(self.degree + 1):
+            # Construct Lagrange polynomials to get the polynomial basis at the collocation point
+            p = np.poly1d([1])
+            for r in range(self.degree + 1):
+                if r != j:
+                    p *= np.poly1d([1, -tau_root[r]]) / (tau_root[j] - tau_root[r])
+
+            # Evaluate the polynomial at the final time to get the coefficients of the continuity equation
+            self.D[j] = p(1.0)
+
+            # Evaluate the time derivative of the polynomial at all collocation points to get the coefficients of the
+            # continuity equation
+            p_der = np.polyder(p)
+            for r in range(self.degree + 1):
+                self.C[j, r] = p_der(tau_root[r])
+
+            # Evaluate the integral of the polynomial to get the coefficients of the quadrature function
+            pint = np.polyint(p)
+            self.B[j] = pint(1.0)
+
+
+class Parameters:
+    def __init__(self, contacts, mass, inertia, r, p_feet_bar, f_max):
+        # Contact pattern
+        self.contacts = contacts
+
+        # Mass of the SRB
+        self.mass = mass
+
+        # Inertia of SRB
+        self.inertia = inertia
+
+        # Sphere of radius r that the foot position is constrained to
+        self.r = r
+
+        # The sth foot position is constrained in a sphere of radius r to satisfy
+        # joint limits. This parameter is the center of the sphere w.r.t the COM
+        self.p_feet_bar = p_feet_bar
+
+        # Maximum ground reaction force in the normal direction
+        self.f_max = f_max
+
+        # Acceleration due to gravity
+        self.g_accel = np.array([0, 0, 9.81])
+
+        # Friction coefficient
+        self.mu = 0.7
+
+        # Omega cost weight
+        self.eOmega = 5e-5
+
+        # Force cost weight
+        self.eF = 1e-6
+
+        # Rotation error cost weight
+        self.eR = 1e-3
+
+        # Final position error cost weight
+        self.eP = 1e-20
+
+        # Solver options
+        self.opts = {"expand": True, "detect_simple_bounds": True, "warn_initial_bounds": True,
+                     "ipopt": {"max_iter": 1000,
+                               "fixed_variable_treatment": "make_constraint",
+                               "hessian_approximation": "limited-memory",
+                               "mumps_mem_percent": 10000,
+                               "print_level": 5}}
+
+
+class Constraints:
+    def __init__(self, p):
+        grf_sym = SX.sym('grf_sym', 3)
+        tau_sym = SX.sym('tau_sym', 3)
+
+        p_body_sym = SX.sym('p_body_sym', 3)
+        dp_body_sym = SX.sym('dp_body_sym', 3)
+        Omega_sym = SX.sym('Omega_sym', 3)
+        DOmega_sym = SX.sym('DOmega_sym', 3)
+
+        R_sym = SX.sym('R_sym', 3, 3)
+        R_ref_sym = SX.sym('R_ref_sym', 3, 3)
+
+        x = vertcat(p_body_sym, dp_body_sym, Omega_sym, DOmega_sym)
+        u = vertcat(grf_sym, tau_sym)
+
+        f_sym_x = SX.sym('f_sym_x')
+        f_sym_y = SX.sym('f_sym_y')
+        f_sym_z = SX.sym('f_sym_z')
+        f_sym = vertcat(f_sym_x, f_sym_y, f_sym_z)
+
+        p_feet_sym = SX.sym('p_feet_sym', 3)
+        p_feet_bar_sym = SX.sym('p_feet_bar_sym', 3)
+
+        xdot = vertcat(dp_body_sym, grf_sym / p.mass - p.g_accel, DOmega_sym, mtimes(np.linalg.inv(p.inertia), (
+                mtimes(transpose(R_sym), tau_sym) - cross(Omega_sym, mtimes(p.inertia, Omega_sym)))))
+        e_R_sym = inv_skew(approximate_log_a(mtimes(transpose(R_ref_sym), R_sym), p.l_terms))
+        L = p.wOmega * mtimes(transpose(Omega_sym), Omega_sym) + \
+            p.wForce * mtimes(transpose(grf_sym), grf_sym) + \
+            p.wRerror * mtimes(transpose(e_R_sym), e_R_sym)
+
+        self.fx = Function('fx', [x, u, R_sym], [xdot], ['x', 'u', 'R'], ['xdot'])
+        self.fl = Function('fl', [x, u, R_sym, R_ref_sym], [L], ['x', 'u', 'R', 'R_ref'], ['L'])
+
+        self.friction_cone_x = Function('friction_cone_x', [f_sym], [fabs(f_sym_x / f_sym_z), ['f'], ['fcx']])
+        self.friction_cone_y = Function('friction_cone_y', [f_sym], [fabs(f_sym_y / f_sym_z)], ['f'], ['fcy'])
+
+        self.kinematic_constraint = Function('kinematic_constraint', [p_body_sym, R_sym, p_feet_sym, p_feet_bar_sym],
+                                             [norm_2(mtimes(R_sym, p_feet_sym - p_body_sym) - p_feet_bar_sym)],
+                                             ['p_body', 'R', 'p_feet', 'p_feet_bar'], ['kc'])
+
+
+class BiQuAcrobatics:
+    def __init__(self, p, mp, constraints, collocation):
+        self.contacts = p.contacts
+        self.opts = p.opts
+
+        self.p_body = []
+        self.dp_body = []
+        self.Omega = []
+        self.DOmega = []
+
+        self.R = []
+
+        self.T = MX.sym('T', self.contacts.num_cons)
+        self.F = []
+        self.p_feet = []
+
+        self.w = []
+        self.lbw = []
+        self.ubw = []
+        self.w0 = []
+        self.J = 0
+        self.g = []
+        self.lbg = []
+        self.ubg = []
+
+        self.add_g_cons(sum1(self.T), [mp.tMin], [mp.tMax])
+
+        R_k = mp.R_ref[0]
+        for k in range(self.contacts.num_steps):
+            i, dt = self.get_dt_k(k)
+            self.p_body = vertcat(self.p_body, MX.sym('p_body_k{}'.format(k), 3, 1))
+            self.dp_body = vertcat(self.dp_body, MX.sym('dp_body_k{}'.format(k), 3, 1))
+            Omega_k = MX.sym('Omega_k{}'.format(k), 3, 1)
+            self.Omega = vertcat(self.Omega, Omega_k)
+            self.DOmega = vertcat(self.DOmega, MX.sym('DOmega_k{}'.format(k), 3, 1))
+            if k != 0:
+                R_k = mtimes(R_k, approximate_exp_a(skew(Omega_k * dt), p.e_terms))
+            self.R = horzcat(self.R, R_k)
+
+        for leg in range(self.contacts.num_legs):
+            for k in range(self.contacts.num_steps):
+                offset = leg * 3 * (self.contacts.num_steps - 1)
+                if self.contacts.step_list[self.contacts.get_current_phase(k)][leg]:
+                    self.F = vertcat(self.F, MX.sym('F_'.format(offset), 3))
+                    self.p_feet = vertcat(self.p_feet, MX.zeros(3))
+                else:
+                    self.F = vertcat(self.F, MX.zeros(3))
+                    self.p_feet = vertcat(self.p_feet, MX.sym('p_feet_'.format(offset), 3))
+
+        # Lift initial conditions
+        x_k = self.get_state_k(0)
+        p_body_k, dp_body_k, Omega_k, DOmega_k = vertsplit(x_k)
+        R_k = self.get_R_k(0)
+        R_ref_k = mp.R_ref[0]
+        self.add_w_cons(x_k, mp.x_g[:, 0], mp.x_g[:, 0], mp.x_g[:, 0])
+
+        for k in range(self.contacts.num_steps):
+            i, dt = self.get_dt_k(k)
+
+            grf = np.zeros((3, 1))
+            tau = np.zeros((3, 1))
+            for leg in range(self.contacts.num_legs):
+                offset = leg * 3 * (self.contacts.num_steps - 1)
+                F_k = self.get_F_k(k, leg)
+                p_feet_k = self.get_p_feet_k(k, leg)
+                if self.contacts.step_list[i][leg]:
+                    grf = grf + F_k
+                    tau = tau + cross(p_feet_k - p_body_k, F_k)
+                    self.add_g_cons(constraints.friction_cone_x(F_k), [0], [p.mu])
+                    self.add_g_cons(constraints.friction_cone_y(F_k), [0], [p.mu])
+                    self.add_g_cons(
+                        constraints.kinematic_constraint(p_body_k, R_k, p_feet_k, p.p_feetbar[:, leg]), [0], [p.r])
+                    self.add_w_cons(F_k, mp.bounds.f[0], mp.bounds.f[1], mp.f_g[offset + 3 * k: offset + 3 * (k + 1)])
+                self.add_w_cons(p_feet_k, mp.bounds.p_feet_k[0], mp.bounds.p_feet_k[1],
+                                mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)])
+            u_k = vertcat(grf, tau)
+
+            # State at collocation points
+            x_c = []
+            for j in range(1, collocation.degree):
+                x_kj = self.get_state_k(0)
+                x_c.append(x_kj)
+                self.add_w_cons(x_kj, mp.x_bounds[0], mp.x_bounds[1], mp.x_g[k])
+
+            # Loop over collocation points
+            x_k_end = collocation.D[0] * x_k
+            for j in range(1, collocation.degree + 1):
+                # Expression for the state derivative at the collocation point
+                x_p = collocation.C[0, j] * x_k
+                for r in range(collocation.degree):
+                    x_p = x_p + collocation.C[r + 1, j] * x_c[r]
+
+                # Append collocation equations
+                fj = constraints.fx(x_c[j - 1], u_k, R_k)
+                qj = constraints.fl(x_c[j - 1], u_k, R_k, R_ref_k)
+                self.add_g_cons(dt * fj - x_p, np.zeros(12, 1), np.zeros(12, 1))
+
+                # Add contribution to the end state
+                x_k_end = x_k_end + collocation.D[j] * x_c[j - 1]
+
+                # Add contribution to quadrature function
+                self.J = self.J + collocation.B[j] * qj * dt
+
+            # New NLP variable for state at end of interval
+            x_k = self.get_state_k(k)
+            p_body_k, dp_body_k, Omega_k, DOmega_k = vertsplit(x_k)
+            R_k = self.get_R_k(k)
+            R_ref_k = mp.R_ref[k]
+            self.add_w_cons(x_k, mp.x_bounds[0], mp.x_bounds[1], mp.x_g[:, k])
+
+            # Add equality constraint
+            self.add_g_cons(x_k_end - x_k, np.zeros(12, 1), np.zeros(12, 1))
+
+    def optimize(self):
+        # Initialize an NLP solver
+        nlp = {'x': self.w, 'f': self.J, 'g': self.g}
+
+        # Allocate a solver
+        solver = nlpsol("solver", "ipopt", nlp, self.opts)
+
+        # Solve the NLP
+        sol = solver(x0=self.w0, lbg=self.lbg, ubg=self.ubg, lbx=self.lbw, ubx=self.ubw)
+
+    def add_w_cons(self, w_k, lbw_k, ubw_k, w0_k):
+        if w_k.size1() == len(lbw_k) and w_k.size1() == len(ubw_k) and len(lbw_k) == len(ubw_k) and w_k.size2() == 1:
+            self.w = vertcat(self.w, w_k)
+            self.lbw = vertcat(self.lbw, lbw_k)
+            self.ubw = vertcat(self.ubw, ubw_k)
+            self.w0 = vertcat(self.w0, w0_k)
+        else:
+            print("Wrong size in design constraints dummy")
+
+    def add_g_cons(self, g_k, lbg_k, ubg_k):
+        if g_k.size1() == len(lbg_k) and g_k.size1() == len(ubg_k) and len(lbg_k) == len(ubg_k) and g_k.size2() == 1:
+            self.g = vertcat(self.g, g_k)
+            self.lbg = vertcat(self.lbg, lbg_k)
+            self.ubg = vertcat(self.ubg, ubg_k)
+        else:
+            print("Wrong size in general constraints dummy")
+
+    def get_state_k(self, k):
+        return vertcat(self.p_body[3 * k: 3 * (k + 1)], self.dp_body[3 * k: 3 * (k + 1)],
+                       self.Omega[3 * k: 3 * (k + 1)], self.DOmega[3 * k: 3 * (k + 1)])
+
+    def get_R_k(self, k):
+        return self.R[:, 3 * k: 3 * (k + 1)]
+
+    def get_dt_k(self, k):
+        i = self.contacts.get_current_phase(k)
+        return i, self.T[i] / self.contacts.step_list[i]
+
+    def get_F_k(self, k, leg):
+        offset = leg * 3 * (self.contacts.num_steps - 1)
+        return self.F[offset + 3 * k: offset + 3 * (k + 1)]
+
+    def get_p_feet_k(self, k, leg):
+        offset = leg * 3 * (self.contacts.num_steps - 1)
+        return self.p_feet[offset + 3 * k: offset + 3 * (k + 1)]
+
+
 class DesignField:
-    def __init__(self, field_name, size, split_flag):
+    def __init__(self, field_name, size):
         self.field_name = field_name
         self.size = size
-        self.split_flag = split_flag
         self.indices = []
 
 
 class CTConstraints:
-    def __init__(self, field_name_list, size_list, split_list):
+    def __init__(self, field_name_list, size_list):
         self.field_name_list = field_name_list
-        self.fields = {field_name: DesignField(field_name, size, split_flag) for (field_name, size, split_flag) in
-                       zip(field_name_list, size_list, split_list)}
+        self.fields = {field_name: DesignField(field_name, size) for (field_name, size) in
+                       zip(field_name_list, size_list)}
         self.current_index = 0
         self.w = []
         self.lbw = []
@@ -53,15 +357,7 @@ class CTConstraints:
         f_field = self.fields[field_name]
         n = len(f_field.indices)
         s1, s2 = f_field.size
-        if f_field.split_flag:
-            opt_design_vars = np.zeros((s1, s2, int(floor(n / s2))))
-            for i in range(int(floor(n / s2))):
-                for j in range(s2):
-                    tmp_var = f_field.indices[i:i + s2 - 1]
-                    opt_design_vars[:, j, i] = np.reshape(opt[tmp_var], s1)
-            return opt_design_vars
-        else:
-            return np.reshape(opt[f_field.indices], (int(floor(n / (s1 * s2))), s2, s1))
+        return np.reshape(opt[f_field.indices], (int(floor(n / (s1 * s2))), s2, s1))
 
     def unpack_all(self, opt_x, check_violations):
         solution = {field_name: {"opt_x": self.unpack_opt_indices(opt_x, field_name),
@@ -80,21 +376,6 @@ class CTConstraints:
                     if np.any(val["opt_x"].flatten()[k] > val["ub_x"].flatten()[k]):
                         print(field_name + " violated UPPER bound at iteration " + str(int(floor(k / (s1 * s2)))))
         return solution
-
-
-class Contacts:
-    def __init__(self, step_list, contact_list):
-        self.num_cons = len(step_list)
-        self.step_list = step_list
-        self.num_steps = int(np.sum(step_list))
-        self.cum_steps = np.cumsum(step_list)
-        self.contact_list = contact_list
-
-    def get_current_phase(self, k):
-        i = 0
-        for j in range(self.num_cons):
-            i = i + (k >= self.cum_steps[j])
-        return i
 
 
 class MotionProfile:
@@ -559,8 +840,7 @@ DOmega_bounds = np.array([[-inf, inf],
 # Set up constraint structure
 fields = ['T', 'p_body', 'dp_body', 'Omega', 'DOmega', 'F_0', 'F_1', 'F_2', 'F_3']
 sizes = [(mp.cons.num_cons, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 1), (3, 1)]
-split_flags = [False, False, False, False, False, False, False, False, False]
-constraints = CTConstraints(fields, sizes, split_flags)
+constraints = CTConstraints(fields, sizes)
 
 # COM of the body (3x1)
 p_body = []

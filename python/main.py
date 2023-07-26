@@ -528,6 +528,7 @@ p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), 
 mp = MotionProfile('backflip', step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
                    p_bodyf, Rf, True)
 
+
 # GRF limits
 f_bounds = np.array([[-inf, inf],
                      [-0.1, 0.1],
