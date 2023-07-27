@@ -291,7 +291,6 @@ class MotionProfile:
         # Reference trajectory (used for non-principle axis)
         slerp = Slerp([0, self.cons.num_steps], rp.concatenate([rp.from_matrix(R0), rp.from_matrix(Rf)]))
         self.R_ref = slerp(np.linspace(0, self.cons.num_steps, self.cons.num_steps)).as_matrix()
-        rp.from_matrix(R0).as_matrix()
 
         # Find time of liftoff for the initial guess
         it = None
