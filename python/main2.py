@@ -30,6 +30,12 @@ class Contacts:
     def get_offset(self, leg):
         return leg * 3 * self.num_steps
 
+    def is_new_contact(self, k, leg):
+        i = self.get_current_phase(k)
+        if self.contact_list[i][leg] and i > 0:
+            if not self.contact_list[i - 1][leg] and k - self.cum_steps[i - 1] == 0:
+                return True
+        return False
 
 class Collocation:
     def __init__(self, degree):
@@ -202,8 +208,10 @@ class BiQuAcrobatics:
         self.add_g_cons(sum1(self.T), [mp.tMin], [mp.tMax])
         self.add_w_cons(self.T, mp.t_b[:, 0], mp.t_b[:, 1], mp.t_g)
 
+        n_steps = self.contacts.num_steps
+
         R_k = mp.R_ref[0]
-        for k in range(self.contacts.num_steps):
+        for k in range(n_steps):
             i, dt = self.get_dt_k(k)
             self.p_body = vertcat(self.p_body, MX.sym('p_body_k{}'.format(k), 3, 1))
             self.dp_body = vertcat(self.dp_body, MX.sym('dp_body_k{}'.format(k), 3, 1))
@@ -215,12 +223,12 @@ class BiQuAcrobatics:
             self.R = horzcat(self.R, R_k)
 
         for leg in range(self.contacts.num_legs):
-            for k in range(self.contacts.num_steps):
+            for k in range(n_steps):
                 offset = self.contacts.get_offset(leg)
                 if self.contacts.contact_list[self.contacts.get_current_phase(k)][leg]:
+                    self.p_feet = vertcat(self.p_feet, MX.zeros(3))
                     self.F = vertcat(self.F, MX.sym('F_' + str(leg) + '_' + str(k), 3))
                     self.F_indices.extend(np.arange(offset + 3 * k, offset + 3 * (k + 1)))
-                    self.p_feet = vertcat(self.p_feet, MX.zeros(3))
                 else:
                     self.p_feet = vertcat(self.p_feet, MX.sym('p_feet_' + str(leg) + '_' + str(k), 3))
                     self.p_feet_indices.extend(np.arange(offset + 3 * k, offset + 3 * (k + 1)))
@@ -236,7 +244,7 @@ class BiQuAcrobatics:
         for leg in range(self.contacts.num_legs):
             p_feet_k = horzcat(p_feet_k, self.get_p_feet_k(0, leg))
 
-        for k in range(self.contacts.num_steps):
+        for k in range(n_steps):
             i, dt = self.get_dt_k(k)
 
             grf = np.zeros((3, 1))
@@ -244,19 +252,18 @@ class BiQuAcrobatics:
             for leg in range(self.contacts.num_legs):
                 offset = self.contacts.get_offset(leg)
                 F_k = self.get_F_k(k, leg)
+                self.add_g_cons(constraints.kinematic_constraint(p_body_k, R_k, p_feet_k[:, leg], p.p_feet_bar[leg, :]),
+                                [0], [p.r])
                 if self.contacts.contact_list[i][leg]:
                     grf = grf + F_k
-                    p_feet_k_leg = p_feet_k[:, leg]
-                    tau = tau + cross(p_feet_k_leg - p_body_k, F_k)
+                    tau = tau + cross(p_feet_k[:, leg] - p_body_k, F_k)
                     # self.add_g_cons(constraints.friction_cone_x(F_k), [0], [p.mu])
                     # self.add_g_cons(constraints.friction_cone_y(F_k), [0], [p.mu])
-                    # self.add_g_cons(
-                    #     constraints.kinematic_constraint(p_body_k, R_k, p_feet_k_leg, p.p_feet_bar[leg, :]), [0], [p.r])
                     self.add_w_cons(F_k, mp.f_b[:, 0], mp.f_b[:, 1], mp.f_g[offset + 3 * k: offset + 3 * (k + 1)])
                 else:
                     p_feet_k_leg = self.get_p_feet_k(k, leg)
                     p_feet_k[:, leg] = p_feet_k_leg
-                    if k == 0 or k == self.contacts.num_steps - 1:
+                    if k == 0 or k == n_steps - 1:
                         self.add_w_cons(p_feet_k_leg, mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)],
                                         mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)],
                                         mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)])
@@ -301,7 +308,7 @@ class BiQuAcrobatics:
             R_k = self.get_R_k(k)
             R_ref_k = mp.R_ref[k]
 
-            if k == self.contacts.num_steps - 1:
+            if k == n_steps - 1:
                 # Final position constraint
                 self.add_w_cons(p_body_k, mp.p_body_g[:, k], mp.p_body_g[:, k], mp.p_body_g[:, k])
 
@@ -309,24 +316,22 @@ class BiQuAcrobatics:
                 self.add_g_cons(reshape(transpose(R_k), (9, 1)), np.reshape(R_ref_k, (9, 1)),
                                 np.reshape(R_ref_k, (9, 1)))
 
-                # The rest of the states only need the typical  path constraints
+                # The rest of the states only need the typical path constraints
                 self.add_w_cons(dp_body_k, mp.dp_body_b[:, 0], mp.dp_body_b[:, 1], mp.dp_body_g[:, k])
                 self.add_w_cons(Omega_k, mp.Omega_b[:, 0], mp.Omega_b[:, 1], mp.Omega_g[:, k])
                 self.add_w_cons(DOmega_k, mp.DOmega_b[:, 0], mp.DOmega_b[:, 1], mp.DOmega_g[:, k])
             elif k != 0:
                 self.add_w_cons(x_k, mp.x_b[:, 0], mp.x_b[:, 1], mp.x_g[:, k])
 
-        # print(self.w)
-        # print(self.T)
-        # print(self.p_body)
-        # print(self.dp_body)
-        # print(self.p_feet)
-        # print(self.F)
+        self.F_sym = vertcat(*[self.F[i] for i in self.F_indices])
+        self.p_feet_sym = vertcat(*[self.p_feet[i] for i in self.p_feet_indices])
 
         # Function to get the optimized x and u at the knot points from w
         self.get_opt = Function('get_opt', [self.w],
-                                [self.T, self.p_body, self.dp_body, self.Omega, self.DOmega], ['w'],
-                                ['T', 'p_body', 'dp_body', 'Omega', 'DOmega'])
+                                [self.T, self.p_body.reshape((3, n_steps)), self.dp_body.reshape((3, n_steps)),
+                                 self.Omega.reshape((3, n_steps)), self.DOmega.reshape((3, n_steps)), self.R,
+                                 self.F_sym, self.p_feet_sym], ['w'], ['T', 'p_body', 'dp_body', 'Omega', 'DOmega',
+                                                                       'R', 'F', 'p_feet'])
 
     def optimize(self):
         # Initialize an NLP solver
@@ -337,7 +342,15 @@ class BiQuAcrobatics:
 
         # Solve the NLP
         sol = solver(x0=self.w0, lbg=self.lbg, ubg=self.ubg, lbx=self.lbw, ubx=self.ubw)
-        print(sol['x'])
+        T, p_body, dp_body, Omega, DOmega, R, F, p_feet = self.get_opt(sol['x'])
+        print(T)
+        print(p_body)
+        print(dp_body)
+        print(Omega)
+        print(DOmega)
+        print(R)
+        print(F)
+        print(p_feet)
 
     def add_w_cons(self, w_k, lbw_k, ubw_k, w0_k):
         if w_k.size1() == len(lbw_k) and w_k.size1() == len(ubw_k) and len(lbw_k) == len(ubw_k) and w_k.size2() == 1:
@@ -431,7 +444,7 @@ class MotionProfile:
         self.x_b = np.vstack((self.p_body_b, self.dp_body_b, self.Omega_b, self.DOmega_b))
 
         # Number of steps per phase
-        step_count = 15
+        step_count = 5
         self.t_g, step_list, contact_list = self.generate_contact_pattern(step_count, gait_repeat)
         self.t_g = tt_g * np.array(self.t_g)
 
@@ -683,11 +696,11 @@ r = 0.2375
 # The nominal leg mappings =
 #   for 'biped' it is the left leg
 #   for 'quadruped' it is the front left leg
-pbar = np.array([0.194, 0.1479])
+pbar = np.array([0.0125, 0.0775])
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
-p_feet_bar = foot_positions(np.array([0, 0, 0]), np.eye(3), pbar, -0.45, mappings)
+p_feet_bar = foot_positions(np.array([0, 0, 0.55516]), np.eye(3), pbar, -0.45, mappings)
 
 # Maximum ground reaction force in the normal direction
 f_max = 500.0
