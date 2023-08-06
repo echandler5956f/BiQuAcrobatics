@@ -37,6 +37,7 @@ class Contacts:
                 return True
         return False
 
+
 class Collocation:
     def __init__(self, degree):
         # Degree of interpolating polynomial
@@ -115,15 +116,33 @@ class Parameters:
         # Final position error cost weight
         self.eP = 1e-20
 
+        # Number of steps per phase
+        self.step_count = 15
+
+        # Degree of the interpolating polynomial used in the gaussian quadrature function approximation
+        self.g_degree = 2
+
+        # Number of cubic Hermite curve segments used to parameterize the contact forces
+        self.F_segments = 3
+
+        # Number of cubic Hermite curve segments used to parameterize the foot positions
+        self.p_segments = 3
+
         # Order of Taylor series approximation for matrix exponential
         self.e_terms = 8
 
         # Order of Taylor series approximation for matrix logarithm
         self.l_terms = 8
 
+        # Just-In-Time compilation options
+        jit_options = {"flags": ["-O3"], "verbose": True, "compiler": "gcc"}
+
         # Solver options
         self.opts = {"expand": True, "detect_simple_bounds": True, "warn_initial_bounds": True,
-                     "ipopt": {"max_iter": 1000,
+                     # "jit": True,
+                     # "compiler": "shell",
+                     # "jit_options": jit_options,
+                     "ipopt": {"max_iter": 100,
                                "fixed_variable_treatment": "make_constraint",
                                "hessian_approximation": "limited-memory",
                                "mumps_mem_percent": 10000,
@@ -156,17 +175,17 @@ class Constraints:
 
         xdot = vertcat(dp_body_sym, grf_sym / p.mass - p.g_accel, DOmega_sym, mtimes(np.linalg.inv(p.inertia), (
                 mtimes(transpose(R_sym), tau_sym) - cross(Omega_sym, mtimes(p.inertia, Omega_sym)))))
-        # e_R_sym = inv_skew(self.approximate_log_a(mtimes(transpose(R_ref_sym), R_sym), p.l_terms))
-        # L = p.eOmega * mtimes(transpose(Omega_sym), Omega_sym) + \
-        #     p.eF * mtimes(transpose(grf_sym), grf_sym) + \
-        #     p.eR * mtimes(transpose(e_R_sym), e_R_sym)
+        e_R_sym = inv_skew(self.approximate_log_a(mtimes(transpose(R_ref_sym), R_sym), p.l_terms))
         L = 0
+        # L = L + p.eOmega * mtimes(transpose(Omega_sym), Omega_sym)
+        # L = L + p.eF * mtimes(transpose(grf_sym), grf_sym)
+        # L = L + p.eR * mtimes(transpose(e_R_sym), e_R_sym)
 
         self.fx = Function('fx', [x, u, R_sym], [xdot], ['x', 'u', 'R'], ['xdot'])
         self.fl = Function('fl', [x, u, R_sym, R_ref_sym], [L], ['x', 'u', 'R', 'R_ref'], ['L'])
 
-        self.friction_cone_x = Function('friction_cone_x', [f_sym], [fabs(f_sym_x / f_sym_z)], ['f'], ['fcx'])
-        self.friction_cone_y = Function('friction_cone_y', [f_sym], [fabs(f_sym_y / f_sym_z)], ['f'], ['fcy'])
+        self.friction_cone_x = Function('friction_cone_x', [f_sym], [f_sym_x / f_sym_z], ['f'], ['fcx'])
+        self.friction_cone_y = Function('friction_cone_y', [f_sym], [f_sym_y / f_sym_z], ['f'], ['fcy'])
 
         self.kinematic_constraint = Function('kinematic_constraint', [p_body_sym, R_sym, p_feet_sym, p_feet_bar_sym],
                                              [norm_2(mtimes(R_sym, p_feet_sym - p_body_sym) - p_feet_bar_sym)],
@@ -180,10 +199,185 @@ class Constraints:
         return log_a
 
 
+class LegStorage:
+    def __init__(self, num_legs):
+        self.num_legs = num_legs
+        self.F_syms = {}
+        self.F = {}
+        self.p_feet_syms = {}
+        self.p_feet = {}
+        for leg in range(self.num_legs):
+            self.F[leg] = []
+            self.p_feet[leg] = []
+
+
+class CubicHermiteSpline:
+    def __init__(self, p):
+        x0 = SX.sym('chs_x0')
+        x1 = SX.sym('chs_x1')
+        dx0 = SX.sym('chs_dx0')
+        dx1 = SX.sym('chs_dx1')
+        t = SX.sym('chs_t')
+        DT = SX.sym('chs_DT')
+        a0 = x0
+        a1 = dx0
+        a2 = - (3.0 * (x0 - x1) + DT * (2.0 * dx0 + dx1)) / power(DT, 2)
+        a3 = (2.0 * (x0 - x1) + DT * (dx0 + dx1)) / power(DT, 3)
+        x = a0 + (a1 * t) + (a2 * power(t, 2)) + (a3 * power(t, 3))
+        self.evaluate_at_t = Function('evaluate_at_t', [x0, x1, dx0, dx1, t, DT], [x],
+                                      ['x0', 'x1', 'dx0', 'dx1', 't', 'DT'], ['x'])
+
+
 class BiQuAcrobatics:
-    def __init__(self, p, mp, constraints, collocation):
+    # def __init__(self, p, mp, constraints):
+    #     self.collocation = Collocation(p.g_degree)
+    #     self.contacts = p.contacts
+    #     self.opts = p.opts
+    #     self.p = p
+    #     self.R0 = mp.R_ref[0]
+    #
+    #     self.p_body = []
+    #     self.dp_body = []
+    #     self.Omega = []
+    #     self.DOmega = []
+    #
+    #     self.R = []
+    #     self.T = MX.sym('T', self.contacts.num_cons)
+    #
+    #     self.w = []
+    #     self.lbw = []
+    #     self.ubw = []
+    #     self.w0 = []
+    #     self.J = 0
+    #     self.g = []
+    #     self.lbg = []
+    #     self.ubg = []
+    #     self.add_g_cons(sum1(self.T), [mp.tMin], [mp.tMax])
+    #     self.add_w_cons(self.T, mp.t_b[:, 0], mp.t_b[:, 1], mp.t_g)
+    #
+    #     n_steps = self.contacts.num_steps
+    #     n_legs = self.contacts.num_legs
+    #
+    #     self.LS = LegStorage(n_legs)
+    #
+    #     R_k = self.R0
+    #     for k in range(n_steps):
+    #         i, dt = self.get_dt_k(k)
+    #         self.p_body = vertcat(self.p_body, MX.sym('p_body_k{}'.format(k), 3, 1))
+    #         self.dp_body = vertcat(self.dp_body, MX.sym('dp_body_k{}'.format(k), 3, 1))
+    #         Omega_k = MX.sym('Omega_k{}'.format(k), 3, 1)
+    #         self.Omega = vertcat(self.Omega, Omega_k)
+    #         self.DOmega = vertcat(self.DOmega, MX.sym('DOmega_k{}'.format(k), 3, 1))
+    #         if k != 0:
+    #             R_k = mtimes(R_k, self.approximate_exp_a(skew(Omega_k * dt), p.e_terms))
+    #         self.R = horzcat(self.R, R_k)
+    #
+    #     # Lift initial conditions
+    #     x_k = self.get_state_k(0)
+    #     p_body_k, dp_body_k, Omega_k, DOmega_k = vertsplit(x_k, [0, 3, 6, 9, 12])
+    #     R_k = self.get_R_k(0)
+    #     R_ref_k = mp.R_ref[0]
+    #     self.add_w_cons(x_k, mp.x_g[:, 0], mp.x_g[:, 0], mp.x_g[:, 0])
+    #     p_feet_k = []
+    #     for leg in range(self.contacts.num_legs):
+    #         p_feet_k = horzcat(p_feet_k, self.get_p_feet_k(0, leg))
+    #
+    #     for k in range(n_steps):
+    #         i, dt = self.get_dt_k(k)
+    #
+    #         grf = np.zeros((3, 1))
+    #         tau = np.zeros((3, 1))
+    #         for leg in range(self.contacts.num_legs):
+    #             offset = self.contacts.get_offset(leg)
+    #             F_k = self.get_F_k(k, leg)
+    #             self.add_g_cons(constraints.kinematic_constraint(p_body_k, R_k, p_feet_k[:, leg], p.p_feet_bar[leg, :]),
+    #                             [0], [p.r])
+    #             if self.contacts.contact_list[i][leg]:
+    #                 grf = grf + F_k
+    #                 tau = tau + cross(p_feet_k[:, leg] - p_body_k, F_k)
+    #                 self.add_g_cons(constraints.friction_cone_x(F_k), [-p.mu], [p.mu])
+    #                 self.add_g_cons(constraints.friction_cone_y(F_k), [-p.mu], [p.mu])
+    #                 self.add_w_cons(F_k, mp.f_b[:, 0], mp.f_b[:, 1], mp.f_g[offset + 3 * k: offset + 3 * (k + 1)])
+    #                 if self.contacts.is_new_contact(k, leg) and k != n_steps - 1:
+    #                     p_feet_k_leg = self.get_p_feet_k(k, leg)
+    #                     p_feet_k[:, leg] = p_feet_k_leg
+    #                     self.add_w_cons(p_feet_k_leg, mp.p_feet_b_ground[:, 0], mp.p_feet_b_ground[:, 1],
+    #                                     np.vstack((mp.p_feet_g[offset + 3 * k: offset + (3 * k) + 2], 0.0)))
+    #             else:
+    #                 p_feet_k_leg = self.get_p_feet_k(k, leg)
+    #                 p_feet_k[:, leg] = p_feet_k_leg
+    #                 self.add_w_cons(p_feet_k_leg, mp.p_feet_b[:, 0], mp.p_feet_b[:, 1],
+    #                                 mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)])
+    #             if k == n_steps - 1:
+    #                 p_feet_k_leg = self.get_p_feet_k(k, leg)
+    #                 p_feet_k[:, leg] = p_feet_k_leg
+    #                 self.add_w_cons(p_feet_k_leg, mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)],
+    #                                 mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)],
+    #                                 mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)])
+    #         u_k = vertcat(grf, tau)
+    #
+    #         # State at collocation points
+    #         x_c = []
+    #         for j in range(self.collocation.degree):
+    #             x_kj = MX.sym('X_' + str(k) + '_' + str(j), 12)
+    #             x_c.append(x_kj)
+    #             self.add_w_cons(x_kj, mp.x_b[:, 0], mp.x_b[:, 1], mp.x_g[:, k])
+    #
+    #         # Loop over collocation points
+    #         x_k_end = self.collocation.D[0] * x_k
+    #         for j in range(1, self.collocation.degree + 1):
+    #             # Expression for the state derivative at the collocation point
+    #             x_p = self.collocation.C[0, j] * x_k
+    #             for r in range(self.collocation.degree):
+    #                 x_p = x_p + self.collocation.C[r + 1, j] * x_c[r]
+    #
+    #             # Append collocation equations
+    #             fj = constraints.fx(x_c[j - 1], u_k, R_k)
+    #             qj = constraints.fl(x_c[j - 1], u_k, R_k, R_ref_k)
+    #             self.add_g_cons(dt * fj - x_p, np.zeros((12, 1)), np.zeros((12, 1)))
+    #
+    #             # Add contribution to the end state
+    #             x_k_end = x_k_end + self.collocation.D[j] * x_c[j - 1]
+    #
+    #             # Add contribution to quadrature function
+    #             self.J = self.J + self.collocation.B[j] * qj * dt
+    #
+    #         # New NLP variable for state at end of interval
+    #         x_k = self.get_state_k(k)
+    #
+    #         # Add equality constraint
+    #         self.add_g_cons(x_k_end - x_k, np.zeros((12, 1)), np.zeros((12, 1)))
+    #
+    #         p_body_k, dp_body_k, Omega_k, DOmega_k = vertsplit(x_k, [0, 3, 6, 9, 12])
+    #         R_k = self.get_R_k(k)
+    #         R_ref_k = mp.R_ref[k]
+    #
+    #         if k == n_steps - 1:
+    #             # Final position constraint
+    #             self.add_w_cons(p_body_k, mp.p_body_g[:, k], mp.p_body_g[:, k], mp.p_body_g[:, k])
+    #
+    #             # Final orientation constraint
+    #             self.add_g_cons(reshape(transpose(R_k), (9, 1)), np.reshape(R_ref_k, (9, 1)),
+    #                             np.reshape(R_ref_k, (9, 1)))
+    #
+    #             # The rest of the states only need the typical path constraints
+    #             self.add_w_cons(dp_body_k, mp.dp_body_b[:, 0], mp.dp_body_b[:, 1], mp.dp_body_g[:, k])
+    #             self.add_w_cons(Omega_k, mp.Omega_b[:, 0], mp.Omega_b[:, 1], mp.Omega_g[:, k])
+    #             self.add_w_cons(DOmega_k, mp.DOmega_b[:, 0], mp.DOmega_b[:, 1], mp.DOmega_g[:, k])
+    #         elif k != 0:
+    #             self.add_w_cons(x_k, mp.x_b[:, 0], mp.x_b[:, 1], mp.x_g[:, k])
+    #
+    #     # Function to get the optimized x and u at the knot points from w
+    #     self.get_opt = Function('get_opt', [self.w],
+    #                             [self.T, self.p_body.reshape((3, n_steps)), self.dp_body.reshape((3, n_steps)),
+    #                              self.Omega.reshape((3, n_steps)), self.DOmega.reshape((3, n_steps)), self.F,
+    #                              self.p_feet], ['w'], ['T', 'p_body', 'dp_body', 'Omega', 'DOmega', 'F', 'p_feet'])
+
+    def __init__(self, p, mp, constraints):
         self.contacts = p.contacts
         self.opts = p.opts
+        self.p = p
+        self.R0 = mp.R_ref[0]
 
         self.p_body = []
         self.dp_body = []
@@ -196,6 +390,8 @@ class BiQuAcrobatics:
         self.p_feet = []
         self.F_indices = []
         self.p_feet_indices = []
+        self.F_length = np.zeros((self.contacts.num_legs, 1), dtype=int)
+        self.p_feet_length = np.zeros((self.contacts.num_legs, 1), dtype=int)
 
         self.w = []
         self.lbw = []
@@ -208,9 +404,11 @@ class BiQuAcrobatics:
         self.add_g_cons(sum1(self.T), [mp.tMin], [mp.tMax])
         self.add_w_cons(self.T, mp.t_b[:, 0], mp.t_b[:, 1], mp.t_g)
 
+        collocation = Collocation(p.g_degree)
+
         n_steps = self.contacts.num_steps
 
-        R_k = mp.R_ref[0]
+        R_k = self.R0
         for k in range(n_steps):
             i, dt = self.get_dt_k(k)
             self.p_body = vertcat(self.p_body, MX.sym('p_body_k{}'.format(k), 3, 1))
@@ -226,12 +424,19 @@ class BiQuAcrobatics:
             for k in range(n_steps):
                 offset = self.contacts.get_offset(leg)
                 if self.contacts.contact_list[self.contacts.get_current_phase(k)][leg]:
-                    self.p_feet = vertcat(self.p_feet, MX.zeros(3))
+                    if self.contacts.is_new_contact(k, leg) or k == n_steps - 1:
+                        self.p_feet = vertcat(self.p_feet, MX.sym('p_feet_' + str(leg) + '_' + str(k), 3))
+                        self.p_feet_indices.extend(np.arange(offset + 3 * k, offset + 3 * (k + 1)))
+                        self.p_feet_length[leg] = self.p_feet_length[leg] + 1
+                    else:
+                        self.p_feet = vertcat(self.p_feet, MX.zeros(3))
                     self.F = vertcat(self.F, MX.sym('F_' + str(leg) + '_' + str(k), 3))
                     self.F_indices.extend(np.arange(offset + 3 * k, offset + 3 * (k + 1)))
+                    self.F_length[leg] = self.F_length[leg] + 1
                 else:
                     self.p_feet = vertcat(self.p_feet, MX.sym('p_feet_' + str(leg) + '_' + str(k), 3))
                     self.p_feet_indices.extend(np.arange(offset + 3 * k, offset + 3 * (k + 1)))
+                    self.p_feet_length[leg] = self.p_feet_length[leg] + 1
                     self.F = vertcat(self.F, MX.zeros(3))
 
         # Lift initial conditions
@@ -257,19 +462,25 @@ class BiQuAcrobatics:
                 if self.contacts.contact_list[i][leg]:
                     grf = grf + F_k
                     tau = tau + cross(p_feet_k[:, leg] - p_body_k, F_k)
-                    # self.add_g_cons(constraints.friction_cone_x(F_k), [0], [p.mu])
-                    # self.add_g_cons(constraints.friction_cone_y(F_k), [0], [p.mu])
+                    # self.add_g_cons(constraints.friction_cone_x(F_k), [-p.mu], [p.mu])
+                    # self.add_g_cons(constraints.friction_cone_y(F_k), [-p.mu], [p.mu])
                     self.add_w_cons(F_k, mp.f_b[:, 0], mp.f_b[:, 1], mp.f_g[offset + 3 * k: offset + 3 * (k + 1)])
+                    if self.contacts.is_new_contact(k, leg) and k != n_steps - 1:
+                        p_feet_k_leg = self.get_p_feet_k(k, leg)
+                        p_feet_k[:, leg] = p_feet_k_leg
+                        self.add_w_cons(p_feet_k_leg, mp.p_feet_b_ground[:, 0], mp.p_feet_b_ground[:, 1],
+                                        np.vstack((mp.p_feet_g[offset + 3 * k: offset + (3 * k) + 2], 0.0)))
                 else:
                     p_feet_k_leg = self.get_p_feet_k(k, leg)
                     p_feet_k[:, leg] = p_feet_k_leg
-                    if k == 0 or k == n_steps - 1:
-                        self.add_w_cons(p_feet_k_leg, mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)],
-                                        mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)],
-                                        mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)])
-                    else:
-                        self.add_w_cons(p_feet_k_leg, mp.p_feet_b[:, 0], mp.p_feet_b[:, 1],
-                                        mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)])
+                    self.add_w_cons(p_feet_k_leg, mp.p_feet_b[:, 0], mp.p_feet_b[:, 1],
+                                    mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)])
+                if k == n_steps - 1:
+                    p_feet_k_leg = self.get_p_feet_k(k, leg)
+                    p_feet_k[:, leg] = p_feet_k_leg
+                    self.add_w_cons(p_feet_k_leg, mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)],
+                                    mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)],
+                                    mp.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)])
             u_k = vertcat(grf, tau)
 
             # State at collocation points
@@ -323,15 +534,14 @@ class BiQuAcrobatics:
             elif k != 0:
                 self.add_w_cons(x_k, mp.x_b[:, 0], mp.x_b[:, 1], mp.x_g[:, k])
 
-        self.F_sym = vertcat(*[self.F[i] for i in self.F_indices])
-        self.p_feet_sym = vertcat(*[self.p_feet[i] for i in self.p_feet_indices])
+        # self.F_sym = vertcat(*[self.F[i] for i in self.F_indices])
+        # self.p_feet_sym = vertcat(*[self.p_feet[i] for i in self.p_feet_indices])
 
         # Function to get the optimized x and u at the knot points from w
         self.get_opt = Function('get_opt', [self.w],
                                 [self.T, self.p_body.reshape((3, n_steps)), self.dp_body.reshape((3, n_steps)),
-                                 self.Omega.reshape((3, n_steps)), self.DOmega.reshape((3, n_steps)), self.R,
-                                 self.F_sym, self.p_feet_sym], ['w'], ['T', 'p_body', 'dp_body', 'Omega', 'DOmega',
-                                                                       'R', 'F', 'p_feet'])
+                                 self.Omega.reshape((3, n_steps)), self.DOmega.reshape((3, n_steps)), self.F,
+                                 self.p_feet], ['w'], ['T', 'p_body', 'dp_body', 'Omega', 'DOmega', 'F', 'p_feet'])
 
     def optimize(self):
         # Initialize an NLP solver
@@ -342,15 +552,32 @@ class BiQuAcrobatics:
 
         # Solve the NLP
         sol = solver(x0=self.w0, lbg=self.lbg, ubg=self.ubg, lbx=self.lbw, ubx=self.ubw)
-        T, p_body, dp_body, Omega, DOmega, R, F, p_feet = self.get_opt(sol['x'])
-        print(T)
-        print(p_body)
-        print(dp_body)
-        print(Omega)
-        print(DOmega)
-        print(R)
-        print(F)
-        print(p_feet)
+        T, p_body, dp_body, Omega, DOmega, F, p_feet = self.get_opt(sol['x'])
+        R = self.integrate_omega_history(self.R0, Omega, T).reshape((self.contacts.num_steps, 9))
+
+        F = np.transpose(np.reshape(F, (-1, 3)))
+        p_feet = np.transpose(np.reshape(p_feet, (-1, 3)))
+        if self.contacts.num_legs == 2:
+            F_fR, F_fL = np.hsplit(F, 2)
+            p_fR, p_fL = np.hsplit(p_feet, 2)
+            np.savetxt('huron/opt/T_opt.csv', np.transpose(np.array(T)), delimiter=',')
+            np.savetxt('huron/opt/p_body_opt.csv', transpose(p_body), delimiter=',')
+            np.savetxt('huron/opt/dp_body_opt.csv', transpose(dp_body), delimiter=',')
+            np.savetxt('huron/opt/Omega_opt.csv', transpose(Omega), delimiter=',')
+            np.savetxt('huron/opt/DOmega_opt.csv', transpose(DOmega), delimiter=',')
+            np.savetxt('huron/opt/R_opt.csv', R, delimiter=',')
+
+            np.savetxt('huron/opt/F_fL.csv', F_fL, delimiter=',')
+            np.savetxt('huron/opt/F_fR.csv', F_fR, delimiter=',')
+
+            np.savetxt('huron/opt/p_fL.csv', transpose(p_fL), delimiter=',')
+            np.savetxt('huron/opt/p_fR.csv', transpose(p_fR), delimiter=',')
+
+            np.savetxt('huron/metadata/step_list.csv', np.array(self.contacts.step_list), delimiter=',')
+            np.savetxt('huron/metadata/contact_list.csv', np.array(self.contacts.contact_list), delimiter=',')
+            np.savetxt('huron/metadata/p_feet_bar.csv', np.array(transpose(self.p.p_feet_bar)), delimiter=',')
+            np.savetxt('huron/metadata/r.csv', [self.p.r], delimiter=',')
+        print(self.contacts.contact_list)
 
     def add_w_cons(self, w_k, lbw_k, ubw_k, w0_k):
         if w_k.size1() == len(lbw_k) and w_k.size1() == len(ubw_k) and len(lbw_k) == len(ubw_k) and w_k.size2() == 1:
@@ -387,6 +614,17 @@ class BiQuAcrobatics:
     def get_p_feet_k(self, k, leg):
         offset = self.contacts.get_offset(leg)
         return self.p_feet[offset + 3 * k: offset + 3 * (k + 1)]
+
+    def integrate_omega_history(self, R0, Omega_opt, T_opt):
+        R_opt = np.zeros((self.contacts.num_steps, 3, 3))
+        R_k = R0
+        for k in range(self.contacts.num_steps):
+            i = self.contacts.get_current_phase(k)
+            dt = T_opt[i] / self.contacts.step_list[i]
+            if k != 0:
+                R_k = np.matmul(R_k, self.approximate_exp_a(skew(Omega_opt[:, k] * dt), self.p.e_terms))
+            R_opt[k, 0:3, 0:3] = R_k
+        return R_opt
 
     @staticmethod
     def approximate_exp_a(a, deg):
@@ -432,6 +670,11 @@ class MotionProfile:
                                   [-inf, inf],
                                   [0, inf]])
 
+        # Convenience constraint to force the stance phase feet to stay on the ground
+        self.p_feet_b_ground = np.array([[-inf, inf],
+                                         [-inf, inf],
+                                         [0, 0]])
+
         # Restrict the decision variables to the sagittal plane, with a tolerance s_b
         if sagittal:
             s_b = [-0.1, 0.1]
@@ -443,9 +686,7 @@ class MotionProfile:
         # Convenience variable
         self.x_b = np.vstack((self.p_body_b, self.dp_body_b, self.Omega_b, self.DOmega_b))
 
-        # Number of steps per phase
-        step_count = 5
-        self.t_g, step_list, contact_list = self.generate_contact_pattern(step_count, gait_repeat)
+        self.t_g, step_list, contact_list = self.generate_contact_pattern(p.step_count, gait_repeat)
         self.t_g = tt_g * np.array(self.t_g)
 
         p.contacts.initialize_contacts(step_list, contact_list)
@@ -478,7 +719,7 @@ class MotionProfile:
         pos = p_feet0
         for k in range(n_steps):
             i = p.contacts.get_current_phase(k)
-            if k < n_steps - 1:
+            if k < n_steps:
                 for leg in range(n_legs):
                     offset = p.contacts.get_offset(leg)
                     self.p_feet_g[offset + 3 * k: offset + 3 * (k + 1)] = pos[leg * 3: (leg + 1) * 3]
@@ -680,14 +921,19 @@ def foot_positions(p_body, R, p_foot, height, mappings):
 
 # Determines the relative leg locations
 mappings = 'biped'
+# mappings = 'quadruped'
 
 # Mass of the SRB
 mass = 37.0
+# mass = 2.50000279
 
 # Inertia of SRB
-inertia = np.array([[3.09249, 0, 0],
-                    [0, 5.106100, 0],
-                    [0, 0, 6.939757]])
+inertia = np.array([[3.09249-1, 0, 0],
+                    [0, 5.106100-1, 0],
+                    [0, 0, 6.939757-1]])
+# inertia = np.array([[3.09249e-2, 0, 0],
+#                     [0, 5.106100e-2, 0],
+#                     [0, 0, 6.939757e-2]])
 
 # Sphere of radius r that the foot position is constrained to
 r = 0.2375
@@ -696,26 +942,29 @@ r = 0.2375
 # The nominal leg mappings =
 #   for 'biped' it is the left leg
 #   for 'quadruped' it is the front left leg
-pbar = np.array([0.0125, 0.0775])
+# pbar = np.array([0.0125, 0.0775])
+pbar = np.array([0.075, 0.0775])
+# pbar = np.array([0.194, 0.1479])
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
-p_feet_bar = foot_positions(np.array([0, 0, 0.55516]), np.eye(3), pbar, -0.45, mappings)
+p_feet_bar = foot_positions(np.array([0, 0, 1.0]), np.eye(3), pbar, -1.0, mappings)
+# p_feet_bar = foot_positions(np.array([0, 0, 0.3]), np.eye(3), pbar, -0.16, mappings)
 
 # Maximum ground reaction force in the normal direction
 f_max = 500.0
-
-# Degree of the interpolating polynomial used in the gaussian quadrature function approximation
-degree = 1
+# f_max = 40.0
 
 # Initial States
-p_body0 = np.array([0, 0, 0.55516])
+p_body0 = np.array([0, 0, 1.0])
+# p_body0 = np.array([0, 0, 0.3])
 tmp = np.zeros((9,))
 x0 = np.hstack((p_body0, np.zeros((9,))))
 R0 = rp.from_euler('zxy', [0, 0, 0], True).as_matrix()
 
 # Final States
-p_bodyf = np.array([0.4, 0.0, 0.55516])
+p_bodyf = np.array([1.0, 0.0, 1.0])
+# p_bodyf = np.array([0.2, 0.0, 0.3])
 xf = np.hstack((p_bodyf, np.zeros((9,))))
 Rf = rp.from_euler('zxy', [0, 0, 0], True).as_matrix()
 
@@ -729,16 +978,13 @@ parameters = Parameters(mass, inertia, r, p_feet_bar, f_max)
 # Roughly what type of action do you want the robot to take?
 # This object calculates the initial guess and assigns tuning parameters to make the program converge better
 # Currently supports: ['walk', 'jump', 'spinning_jump', 'diagonal_jump', 'barrel_roll', 'backflip']
-motion_profile = MotionProfile(parameters, mappings, 'walk', x0, R0, p_feet0, xf, Rf, p_feetf, 2.0, True, 2)
+motion_profile = MotionProfile(parameters, mappings, 'walk', x0, R0, p_feet0, xf, Rf, p_feetf, 3.0, True, 2)
 
 # Stores constraints and the objective as Casadi functions
 constraints = Constraints(parameters)
 
-# Gaussian quadrature collocation scheme
-collocation = Collocation(degree)
-
 # Combines the states, constraints, initial guesses, and objective into a nonlinear program solvable by Ipopt
-acrobatics = BiQuAcrobatics(parameters, motion_profile, constraints, collocation)
+acrobatics = BiQuAcrobatics(parameters, motion_profile, constraints)
 
 # Solve the program
 acrobatics.optimize()

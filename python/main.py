@@ -150,7 +150,7 @@ class MotionProfile:
         eP = 1e-20
 
         # Scaling parameter for initial trajectory guess
-        beta = -0.105
+        beta = -0.082
 
         # Scaling parameter for initial trajectory guess
         gamma = 0.45
@@ -335,12 +335,12 @@ class MotionProfile:
         self.t_guess[it] = t_fl
         avg_lin_acc = np.array(2 * (p_bodyf[0:2] - self.p_guess[0:2, 0]) / (np.power(t_lo, 2) + (2 * t_fl * t_lo)))
         if self.p_axis != 1:
-            # e0 = rp.from_matrix(R0).as_euler('zxy')
-            # ef = rp.from_matrix(Rf).as_euler('zxy')
-            # e0 = np.array([e0[1], e0[2], e0[0]])
-            # ef = np.array([ef[1], ef[2], ef[0]])
-            e0 = np.array([0, 0, 0])
-            ef = np.array([0, -2 * pi, 0])
+            e0 = rp.from_matrix(R0).as_euler('zxy')
+            ef = rp.from_matrix(Rf).as_euler('zxy')
+            e0 = np.array([e0[1], e0[2], e0[0]])
+            ef = np.array([ef[1], ef[2], ef[0]])
+            # e0 = np.array([0, 0, 0])
+            # ef = np.array([0, -2 * pi, 0])
         else:
             e0 = np.array([0, 0, 0])
             ef = np.array([-2 * pi, 0, 0])
@@ -488,7 +488,7 @@ mu = 0.7
 
 # Maximum ground reaction force in the Z direction
 # (friction constraints imply the force in the X and Y direction have to be less than this)
-f_max = 40
+f_max = 20
 
 # Degree of Taylor series approximation for matrix exponential
 e_terms = 8
@@ -497,18 +497,18 @@ e_terms = 8
 l_terms = 8
 
 # Steps per contact phase
-step_list = [30, 30, 30]
+step_list = [30, 30]
 
 # Initial States
-p_body0 = np.array([0, 0, 0.3])
+p_body0 = np.array([0, 0, 0.175])
 dp_body0 = np.array([0, 0, 0])
 Omega0 = np.array([0, 0, 0])
 DOmega0 = np.array([0, 0, 0])
-R0 = rp.from_euler('zxy', [-180, 0, 0], True).as_matrix()
+R0 = rp.from_euler('zxy', [0, 0, 0], True).as_matrix()
 
 # Final States
-p_bodyf = np.array([0.25, 0.0, 0.3])
-Rf = rp.from_euler('zxy', [-180, 0, 0], True).as_matrix()
+p_bodyf = np.array([0.0, 0.0, 0.275])
+Rf = rp.from_euler('zxy', [90, 0, 0], True).as_matrix()
 
 # Place the feet below the hip
 tmp = np.array([0.194, 0.1479])
@@ -517,37 +517,35 @@ p_feetf = foot_positions(p_bodyf, Rf, tmp, 0.0)
 
 # The sth foot position is constrained in a sphere of radius r to satisfy
 # joint limits. This parameter is the center of the sphere w.r.t the COM
-# pbar = [0.194, 0.1479, -0.16]
 pbar = [0.194, 0.1479, -0.16]
 p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), leg_mask(pbar, 4)]).transpose()
 
 # Roughly what type of action do you want the robot to take?
 # This only influences the initial guess and some tuning parameters to make the program converge better
 # ['jump', 'spinning_jump', 'diagonal_jump', 'barrel_roll', 'backflip']
-mp = MotionProfile('backflip', step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
+mp = MotionProfile('spinning_jump', step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
                    p_bodyf, Rf, True)
-
 
 # GRF limits
 f_bounds = np.array([[-inf, inf],
-                     [-0.1, 0.1],
+                     [-inf, inf],
                      [0, f_max]])
 
 # COM bounding constraint. Ideally you would set this to some section of a
 # tube each timestep within you want the trajectory to lie
 p_body_bounds = np.array([[-inf, inf],
-                          [-0.1, 0.1],
-                          [0, inf]])
+                          [-inf, inf],
+                          [0.0875, inf]])
 
 # Velocity bounds to make the problem more solvable
 dp_body_bounds = np.array([[-inf, inf],
-                           [-0.1, 0.1],
+                           [-inf, inf],
                            [-inf, inf]])
 
 # Angular velocity bounds to make the problem more solvable
 Omega_bounds = np.array([[-inf, inf],
                          [-inf, inf],
-                         [-0.1, 0.1]])
+                         [-inf, inf]])
 
 # Time derivative angular velocity bounds to make the problem more solvable
 DOmega_bounds = np.array([[-inf, inf],
@@ -611,13 +609,13 @@ for k in range(mp.cons.num_steps):
         R_k = mtimes(R_k, approximate_exp_a(skew(Omega_k * dt), e_terms))
         R = horzcat(R, R_k)
 
-    if mp.cons.contact_list[mp.cons.get_current_phase(k)][0]:
+    if mp.cons.contact_list[i][0]:
         F_0 = vertcat(F_0, MX.sym('F_0_k{}'.format(k), 3, 1))
-    if mp.cons.contact_list[mp.cons.get_current_phase(k)][1]:
+    if mp.cons.contact_list[i][1]:
         F_1 = vertcat(F_1, MX.sym('F_1_k{}'.format(k), 3, 1))
-    if mp.cons.contact_list[mp.cons.get_current_phase(k)][2]:
+    if mp.cons.contact_list[i][2]:
         F_2 = vertcat(F_2, MX.sym('F_2_k{}'.format(k), 3, 1))
-    if mp.cons.contact_list[mp.cons.get_current_phase(k)][3]:
+    if mp.cons.contact_list[i][3]:
         F_3 = vertcat(F_3, MX.sym('F_3_k{}'.format(k), 3, 1))
 
 J = 0
@@ -729,7 +727,7 @@ for k in range(mp.cons.num_steps):
         constraints.add_general_constraints(reshape(transpose(R_k), (9, 1)), np.reshape(Rf, (9, 1)),
                                             np.reshape(Rf, (9, 1)))
         for leg in range(4):
-            constraints.add_general_constraints(norm_2(mtimes(R_k, p_feetf[:, leg] - p_body_k) -
+            constraints.add_general_constraints(norm_2(mtimes(transpose(R_k), p_feetf[:, leg] - p_body_k) -
                                                        p_feet_bar[:, leg]), [0], [r])
 
     # Objective Function
@@ -818,6 +816,10 @@ F0_guess = np.transpose(F0_guess.reshape(F0_guess.shape[0], -1))
 F1_guess = np.transpose(F1_guess.reshape(F1_guess.shape[0], -1))
 F2_guess = np.transpose(F2_guess.reshape(F2_guess.shape[0], -1))
 F3_guess = np.transpose(F3_guess.reshape(F3_guess.shape[0], -1))
+
+# print(p_body_opt)
+# print(R_opt)
+# print(F_0_opt)
 
 # Print solution
 # print("-----")
