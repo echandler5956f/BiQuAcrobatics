@@ -54,44 +54,44 @@ end
 
 % Import the data
 
-step_list = table2array(readtable(pwd + "\python\solo_12\metadata\step_list"));
-contact_list = table2array(readtable(pwd + "\python\solo_12\metadata\contact_list"));
-p_feet0 = table2array(readtable(pwd + "\python\solo_12\metadata\p_feet0"));
-p_feetf = table2array(readtable(pwd + "\python\solo_12\metadata\p_feetf"));
-p_feet_bar = table2array(readtable(pwd + "\python\solo_12\metadata\p_feet_bar"));
-r = table2array(readtable(pwd + "\python\solo_12\metadata\r"));
+step_list = table2array(readtable(pwd + "\python_opt\solo_12\metadata\step_list"));
+contact_list = table2array(readtable(pwd + "\python_opt\solo_12\metadata\contact_list"));
+p_feet0 = table2array(readtable(pwd + "\python_opt\solo_12\metadata\p_feet0"));
+p_feetf = table2array(readtable(pwd + "\python_opt\solo_12\metadata\p_feetf"));
+p_feet_bar = table2array(readtable(pwd + "\python_opt\solo_12\metadata\p_feet_bar"));
+r = table2array(readtable(pwd + "\python_opt\solo_12\metadata\r"));
 
 n_p = size(step_list, 1);
 Nch = cumsum(step_list);
 Nc = sum(step_list);
 
-p_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\p_body_opt"))), 3, Nc);
-dp_body_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\dp_body_opt"))), 3, Nc);
-Omega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\Omega_opt"))), 3, Nc);
-DOmega_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\DOmega_opt"))), 3, Nc);
-R_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\R_opt"))), 3, 3, Nc);
-R_ref = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\R_guess"))), 3, 3, Nc);
+p_body_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\p_body_opt"))), 3, Nc);
+dp_body_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\dp_body_opt"))), 3, Nc);
+Omega_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\Omega_opt"))), 3, Nc);
+DOmega_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\DOmega_opt"))), 3, Nc);
+R_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\R_opt"))), 3, 3, Nc);
+R_ref = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\R_guess"))), 3, 3, Nc);
 p_feet_opt = zeros(3, 4, Nc);
 
 f_idx = [0;0;0;0];
 for i = 1 : n_p
     f_idx = f_idx + transpose(contact_list(i, :));
 end
-F0_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F0_opt"))), 3, Nc);
-F1_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F1_opt"))), 3, Nc);
-F2_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F2_opt"))), 3, Nc);
-F3_opt = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\opt\F3_opt"))), 3, Nc);
-T_opt = table2array(readtable(pwd + "\python\solo_12\opt\T_opt"));
+F0_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\F0_opt"))), 3, Nc);
+F1_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\F1_opt"))), 3, Nc);
+F2_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\F2_opt"))), 3, Nc);
+F3_opt = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\opt\F3_opt"))), 3, Nc);
+T_opt = table2array(readtable(pwd + "\python_opt\solo_12\opt\T_opt"));
 
-p_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\p_body_guess"))), 3, Nc);
-dp_body_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\dp_body_guess"))), 3, Nc);
-Omega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\Omega_guess"))), 3, Nc);
-DOmega_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\DOmega_guess"))), 3, Nc);
-F0_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\F0_guess"))), 3, Nc);
-F1_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\F1_guess"))), 3, Nc);
-F2_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\F2_guess"))), 3, Nc);
-F3_guess = reshape(transpose(table2array(readtable(pwd + "\python\solo_12\initial_guess\F3_guess"))), 3, Nc);
-T_guess = table2array(readtable(pwd + "\python\solo_12\initial_guess\T_guess"));
+p_body_guess = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\p_body_guess"))), 3, Nc);
+dp_body_guess = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\dp_body_guess"))), 3, Nc);
+Omega_guess = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\Omega_guess"))), 3, Nc);
+DOmega_guess = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\DOmega_guess"))), 3, Nc);
+F0_guess = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\F0_guess"))), 3, Nc);
+F1_guess = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\F1_guess"))), 3, Nc);
+F2_guess = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\F2_guess"))), 3, Nc);
+F3_guess = reshape(transpose(table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\F3_guess"))), 3, Nc);
+T_guess = table2array(readtable(pwd + "\python_opt\solo_12\initial_guess\T_guess"));
 
 F_opt = zeros(3, 4, Nc);
 F_ref = zeros(3, 4, Nc);
@@ -195,7 +195,7 @@ for i = 1 : n_p
 end
 
 if animate == true
-    robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
+    robot = importrobot("solo_12_urdf\urdf\solo_12.urdf","DataFormat","column");
     if ~visualizeReference
         qc = [p_body_opt(:,1); transpose(rotm2eul(R_opt(:,:,1), 'ZXY'))]; % Pose
 

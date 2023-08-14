@@ -1,8 +1,8 @@
 
-python/.idea/vcs.xml
-python/.idea/inspectionProfiles/profiles_settings.xml
-python/.idea/misc.xml
-python/.idea/modules.xml
-python/.idea/python.iml
+python_opt/.idea/vcs.xml
+python_opt/.idea/inspectionProfiles/profiles_settings.xml
+python_opt/.idea/misc.xml
+python_opt/.idea/modules.xml
+python_opt/.idea/python.iml
 *.xml
 *.iml
