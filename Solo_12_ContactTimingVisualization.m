@@ -347,7 +347,9 @@ end
 
 function initVisualizer(robot, qj)
     figure;
-    ax = show(robot, qj, "PreservePlot", false,"Frames","on");
+    ax = show(robot, qj, "PreservePlot", false, "FastUpdate", true, ...
+        "Frames","off");
+    lighting gouraud
     hold on;
     ax.XLabel.String = "X (m)";
     ax.YLabel.String = "Y (m)";
@@ -364,9 +366,9 @@ function initVisualizer(robot, qj)
     J(:,:,2) = J(:,:);
     J(:,:,3) = J(:,:,1);
     J = cast(J, "double");
-    checkSurf = surf(ax, mX, mY, 0 * mX, "FaceColor","flat");
-    checkSurf.CDataMode = "manual";
-    checkSurf.CData = J;
+    h = surf(ax, mX, mY, 0 * mX, "FaceColor","flat");
+    h.CDataMode = "manual";
+    h.CData = J;
 end
 
 function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...

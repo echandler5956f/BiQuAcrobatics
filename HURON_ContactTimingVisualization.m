@@ -1,7 +1,5 @@
 %% Initialize
-
 clc; close all
-
 % animate = true;
 % visualizeReference = false;
 % 
@@ -37,7 +35,6 @@ clc; close all
 % disp(x1);
 % % q = [p_body-[0;0;L2+L3+L0]; 0; 0; 0; zeros(2, 1); q1(1:3); 0; zeros(2, 1); q1(4:6); 0];
 % % q = [[0;0;0]; 0; 0; 0; zeros(2, 1); q1(1:3); 0; zeros(2, 1); q1(4:6); 0];
-
 robot = importrobot("huron\huron.urdf","DataFormat","column");
 ik = inverseKinematics('RigidBodyTree', robot);
 weights = [1 1 1 1 1 1];
@@ -70,17 +67,14 @@ disp(q);
 initVisualizer(robot2, q);
 com = centerOfMass(robot2, q);
 disp(com);
-
 function qj = getJointAngles(kin, p_body_k, R_k, p_feet_k, y0)
     T_wb = [transpose(R_k),-p_body_k; 
             0, 0, 0, 1];
     T_bf1 = T_wb*[p_feet_k(1:3,1);1];
     T_bf2 = T_wb*[p_feet_k(1:3,2);1];
-
     qj = [kin.ik([legMask(T_bf1(1:3,1),1)], y0(1:3));
           kin.ik([legMask(T_bf2(1:3,1),2)], y0(4:6))];
 end
-
 function initVisualizer(robot, qj)
     figure;
     ax = show(robot, qj, "PreservePlot", false,"Frames","on");
@@ -104,14 +98,12 @@ function initVisualizer(robot, qj)
     checkSurf.CDataMode = "manual";
     checkSurf.CData = J;
 end
-
 function i = getCurrentPhase(k, Nch)
     i = 1;
     for j = 1 : length(Nch)-1
         i = i + (k > Nch(j));
     end
 end
-
 function newPos = legMask(pos, leg)
     if leg == 1
         newPos = pos;
