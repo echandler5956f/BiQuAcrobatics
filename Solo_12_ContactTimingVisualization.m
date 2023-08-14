@@ -177,7 +177,7 @@ end
 % plot3(0,0,des_height, 'or');
 
 %% Visualization
-% close all;
+close all;
 
 slowDown = 1;
 rates = {};
@@ -197,98 +197,25 @@ end
 if animate == true
     robot = importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column");
     if ~visualizeReference
-        % % qc = [p_body_opt(:,1); transpose(rotm2eul(R_opt(:,:,1), 'ZXY'))]; % Pose
-        qc = [eul2rotm([pi/6,0,0],'ZXY') * p_body_opt(:,1) + [1;0;0]; transpose(rotm2eul(eul2rotm([pi/6,0,0],'ZXY'), 'ZXY'))]; % Pose
-        % tmptmp = [0.156372658950385;-5.23352266796980;6.28298816181308;0.156316328020362;-5.23348980431241;6.28304544914869;0.156391147631049;5.23354327061471;-6.28294654562040;0.0906054502167726;-6.28318530717959;4.97223940717347];
+        qc = [p_body_opt(:,1); transpose(rotm2eul(R_opt(:,:,1), 'ZXY'))]; % Pose
+
         qj = getJointAngles(kin, p_body_opt(:,1), R_opt(:,:,1), p_feet_opt(:,:,1), zeros(12,1));
         qcj = [qc;qj];
         initVisualizer(robot, qcj);
-        % alpha(0.1)
+
         % plotTransforms(p_qref, R_qref)
         plts = [];
-        f1pos = [];
-        f2pos = [];
-        f3pos = [];
-        f4pos = [];
-        flag123 = true;
         while true
-        % for jfk = 1 : 1
             for k = 1 : Nc
                 i = getCurrentPhase(k, Nch);
                 qc = [p_body_opt(:,k); transpose(rotm2eul(R_opt(:,:,k), 'ZXY'))];
-                % qc = [eul2rotm([pi/6,0,0],'ZXY') * p_body_opt(:,k) + [1;0;0]; transpose(rotm2eul(eul2rotm([pi/6,0,0],'ZXY'), 'ZXY'))];
                 qj = getJointAngles(kin, p_body_opt(:,k), R_opt(:,:,k), p_feet_opt(:,:,k), qj);
                 qcj = [qc; qj];
-                % tmo = [R_opt(:,:,k), p_body_opt(:,k) + [0.6;0;0];
-                %        0, 0, 0, 1];
-                % f1pos = [f1pos, tmo * [legMask(kin.fk(qj(1:3)),1);1]];
-                % f2pos = [f2pos, tmo * [legMask(kin.fk(qj(4:6)),2);1]];
-                % f3pos = [f3pos, tmo * [legMask(kin.fk(qj(7:9)),3);1]];
-                % f4pos = [f4pos, tmo * [legMask(kin.fk(qj(10:12)),4);1]];
-                [h, plts] = drawQuadruped(robot,qcj, p_feet_opt(:,:,k),p_feet_bar,r, ...
-                    R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts, false, true);
-                % [h, plts] = drawQuadruped(robot,qcj,eul2rotm([pi/6,0,0],'ZXY') * p_feet_opt(:,:,k),p_feet_bar,r, ...
-                %     R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts, false, true);
-                % alpha(h, 0.0)
+                plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
+                    R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts);
                 waitfor(rates{i});
             end
-            % if flag123
-            %     plot3(f1pos(1,:),f1pos(2,:),f1pos(3,:), '--', 'LineWidth',2.0)
-            %     plot3(f2pos(1,:),f2pos(2,:),f2pos(3,:), '--', 'LineWidth',2.0)
-            %     plot3(f3pos(1,:),f3pos(2,:),f3pos(3,:), '--', 'LineWidth',2.0)
-            %     plot3(f4pos(1,:),f4pos(2,:),f4pos(3,:), '--', 'LineWidth',2.0)
-            % end
-            % flag123 = false;
         end
-
-        % plot3(f1pos(1,:),f1pos(2,:),f1pos(3,:), '--', 'LineWidth',2.0)
-        % plot3(f2pos(1,:),f2pos(2,:),f2pos(3,:), '--', 'LineWidth',2.0)
-        % plot3(f3pos(1,:),f3pos(2,:),f3pos(3,:), '--', 'LineWidth',2.0)
-        % plot3(f4pos(1,:),f4pos(2,:),f4pos(3,:), '--', 'LineWidth',2.0)
-
-        iii = 1;
-        % qjtemp = [];
-        for k = 1 : Nc
-                i = getCurrentPhase(k, Nch);
-               qc = [eul2rotm([pi/6,0,0],'ZXY') * p_body_opt(:,k) + [1;0;0]; transpose(rotm2eul(eul2rotm([pi/6,0,0],'ZXY'), 'ZXY'))];
-                qj = getJointAngles(kin, p_body_opt(:,k), R_opt(:,:,k), p_feet_opt(:,:,k), qj);
-                qcj = [qc; qj];
-
-                if k == 1
-                    % qjtemp = qj;
-                    % [h, plts] = drawQuadruped(importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column"),qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
-                    %         R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts, false, false);
-                    % alpha(h, 0.0)
-                else
-                    % if k == 30 || k == 45
-                    if k == 5 || k == 20 || k == 29 || k == 45
-                    % if k == 30 || k == 60 || k == 70 || k == 80 || k == 85
-                        % if k == 85 || k == 87
-                        %     qj = qjtemp;
-                        %     qcj = [qc; qjtemp];
-                        % end
-                        [h, plts] = drawQuadruped(importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column"),qcj,eul2rotm([pi/6,0,0],'ZXY') * p_feet_opt(:,:,k),p_feet_bar,r, ...
-                                R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts, true, false);
-                        % alpha(h, exp(-0.025 * k))
-                        % alpha(h, iii/26);
-                        % alpha(h, 0.1)
-                        iii = iii + 1;
-                    end
-                    if k == 60
-                        [h, plts] = drawQuadruped(importrobot("solo_12\urdf\solo_12.urdf","DataFormat","column"),qcj,eul2rotm([pi/6,0,0],'ZXY') * p_feet_opt(:,:,k),p_feet_bar,r, ...
-                                R_opt(:,:,k),F_opt(:,:,k),p_body_opt(:,1),plts, true, false);
-                        % alpha(h, 0.1)
-                        % alpha(h, exp(-0.025 * k))
-                        % alpha(h, 1.0);
-                    end
-                end
-                waitfor(rates{i});
-        end
-        pbodynew = [];
-        for k = 1 : Nc
-            pbodynew = [pbodynew, eul2rotm([pi/6,0,0],'ZXY') * p_body_opt(:,k) + [1;0;0]];
-        end
-        plot3(pbodynew(1,:),pbodynew(2,:),pbodynew(3,:),'b',LineWidth=2)
     else
         qc = [p_body_guess(:,1); transpose(rotm2eul(R_ref(:,:,1), 'ZXY'))]; % Pose
 
@@ -305,7 +232,7 @@ if animate == true
                 qj = getJointAngles(kin, p_body_guess(:,k), R_ref(:,:,k), p_feet_opt(:,:,k), zeros(12,1));
                 qcj = [qc; qj];
                 plts = drawQuadruped(robot,qcj,p_feet_opt(:,:,k),p_feet_bar,r, ...
-                    R_ref(:,:,k),F_ref(:,:,k),p_body_guess(:,1),plts, false, true);
+                    R_ref(:,:,k),F_ref(:,:,k),p_body_guess(:,1),plts);
                 waitfor(rates{i});
             end
         end
@@ -406,24 +333,21 @@ end
 
 function qj = getJointAngles(kin, p_body_k, R_k, p_feet_k, y0)
     T_wb = [transpose(R_k),-p_body_k; 
-        0, 0, 0, 1];
+            0, 0, 0, 1];
     T_bf1 = T_wb*[p_feet_k(:,1);1];
     T_bf2 = T_wb*[p_feet_k(:,2);1];
     T_bf3 = T_wb*[p_feet_k(:,3);1];
     T_bf4 = T_wb*[p_feet_k(:,4);1];
 
-    qj = [kin.ik(legMask(T_bf1(1:3,1),1), y0(1:3));
-          kin.ik(legMask(T_bf2(1:3,1),2), y0(1:3));
+    qj = [kin.ik(legMask(T_bf1(1:3,1),1), y0(7:9));
+          kin.ik(legMask(T_bf2(1:3,1),2), y0(10:12));
           kin.ik(legMask(T_bf3(1:3,1),3), y0(7:9));
-          kin.ik(legMask(T_bf4(1:3,1),4), y0(7:9))];
+          kin.ik(legMask(T_bf4(1:3,1),4), y0(10:12))];
 end
 
 function initVisualizer(robot, qj)
     figure;
-    ax = show(robot, qj, "PreservePlot", false, "FastUpdate", true, ...
-        "Frames","off");
-    % alpha(ax, 0.0)
-    lighting gouraud
+    ax = show(robot, qj, "PreservePlot", false,"Frames","on");
     hold on;
     ax.XLabel.String = "X (m)";
     ax.YLabel.String = "Y (m)";
@@ -431,8 +355,7 @@ function initVisualizer(robot, qj)
     ax.XLim = [-0.5 3];
     ax.YLim = [-2 2];
     ax.ZLim = [-0.1 1];
-    % view(ax, 135, 25);
-    view(ax, -180, 0);
+    view(ax, 135, 25);
     scale = 20;
     % hack to draw a checkerboard with a surface
     [mX, mY] = meshgrid(-0.025*scale:0.025*scale:0.15*scale, ...
@@ -441,27 +364,20 @@ function initVisualizer(robot, qj)
     J(:,:,2) = J(:,:);
     J(:,:,3) = J(:,:,1);
     J = cast(J, "double");
-    h = surf(ax, mX, mY, 0 * mX, "FaceColor","flat");
-    % lightangle(-45,30)
-    h.CDataMode = "manual";
-    h.CData = J;
-    % h.FaceLighting = 'gouraud';
-    % h.AmbientStrength = 0.3;
-    % h.DiffuseStrength = 0.8;
-    % h.SpecularStrength = 0.9;
-    % h.SpecularExponent = 25;
-    % h.BackFaceLighting = 'unlit';    
+    checkSurf = surf(ax, mX, mY, 0 * mX, "FaceColor","flat");
+    checkSurf.CDataMode = "manual";
+    checkSurf.CData = J;
 end
 
-function [h, plts] = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
-    p_body0, old_plts, flag1, flag2)
+function plts = drawQuadruped(robot, q, p_feet, p_feet_bar, r, R, F, ...
+    p_body0, old_plts)
     p_body = q(1:3);
     q = [q(1:6);
-            -q(7);q(8:9);
-            q(10:12);
-            -q(13:15);
-            q(16);-q(17:18)];
-    h = show(robot, q, "PreservePlot", flag1, "FastUpdate", flag2, ...
+        q(7);-q(8:9);
+        -q(10:12);
+        q(13:15);
+        -q(16);q(17:18)];
+    show(robot, q, "PreservePlot", false, "FastUpdate", true, ...
         "Frames","off");
     plts = [];
     % for leg = 1 : 4
