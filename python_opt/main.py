@@ -1,5 +1,6 @@
 from casadi import *
 import numpy as np
+import math
 from scipy.spatial.transform import Rotation as rp
 from scipy.spatial.transform import Slerp
 
@@ -409,7 +410,7 @@ class MotionProfile:
 def approximate_exp_a(a, deg):
     exp_a = DM(np.zeros((3, 3)))
     for i in range(deg):
-        exp_a = exp_a + (mpower(a, i) / np.math.factorial(i))
+        exp_a = exp_a + (mpower(a, i) / math.factorial(i))
     return exp_a
 
 
@@ -526,7 +527,6 @@ p_feet_bar = np.array([leg_mask(pbar, 1), leg_mask(pbar, 2), leg_mask(pbar, 3), 
 # ['jump', 'spinning_jump', 'diagonal_jump', 'barrel_roll', 'backflip']
 mp = MotionProfile('backflip', step_list, mass, inertia, g_accel, f_max, p_body0, dp_body0, Omega0, DOmega0, R0,
                    p_bodyf, Rf, True)
-
 
 # GRF limits
 f_bounds = np.array([[-inf, inf],
@@ -745,121 +745,121 @@ lbx = constraints.lbw
 ubx = constraints.ubw
 x0 = constraints.w0
 
-# Initialize an NLP solver
-nlp = {'x': x, 'f': J, 'g': constraints.g}
-
-jit_options = {"flags": ["-O3"], "verbose": True, "compiler": "gcc"}
-
-# Solver options
-opts = {"expand": True,
-        # "jit": True,
-        # "compiler": "shell",
-        # "jit_options": jit_options,
-        "detect_simple_bounds": True, "warn_initial_bounds": True,
-        "ipopt": {"max_iter": 1000,
-                  "fixed_variable_treatment": "make_constraint",
-                  "hessian_approximation": "limited-memory",
-                  "mumps_mem_percent": 10000,
-                  "print_level": 5}}
-
-# Allocate a solver
-solver = nlpsol("solver", "ipopt", nlp, opts)
-
-# Solve the NLP
-sol = solver(x0=x0, lbg=constraints.lbg, ubg=constraints.ubg, lbx=lbx, ubx=ubx)
-sol_f = sol["f"]
-sol_x = sol["x"]
-sol_lam_x = sol["lam_x"]
-sol_lam_g = sol["lam_g"]
-
-solution = constraints.unpack_all(sol_x, True)
-T_opt = solution["T"]["opt_x"]
-p_body_opt = solution["p_body"]["opt_x"]
-dp_body_opt = solution["dp_body"]["opt_x"]
-Omega_opt = solution["Omega"]["opt_x"]
-DOmega_opt = solution["DOmega"]["opt_x"]
-F_0_opt = solution["F_0"]["opt_x"]
-F_1_opt = solution["F_1"]["opt_x"]
-F_2_opt = solution["F_2"]["opt_x"]
-F_3_opt = solution["F_3"]["opt_x"]
-
-T_opt = T_opt.reshape(T_opt.shape[0], -1)
-p_body_opt = p_body_opt.reshape(p_body_opt.shape[0], -1)
-dp_body_opt = dp_body_opt.reshape(dp_body_opt.shape[0], -1)
-Omega_opt = Omega_opt.reshape(Omega_opt.shape[0], -1)
-DOmega_opt = DOmega_opt.reshape(DOmega_opt.shape[0], -1)
-R_opt = integrate_omega_history(mp.cons, R0, Omega_opt, T_opt, e_terms)
-
-R_opt = R_opt.reshape(mp.cons.num_steps, 9)
-R_guess = np.array(mp.R_ref).reshape(mp.cons.num_steps, 9)
-
-F_0_opt = F_0_opt.reshape(F_0_opt.shape[0], -1)
-F_1_opt = F_1_opt.reshape(F_1_opt.shape[0], -1)
-F_2_opt = F_2_opt.reshape(F_2_opt.shape[0], -1)
-F_3_opt = F_3_opt.reshape(F_3_opt.shape[0], -1)
-np_con_list = np.array(mp.cons.contact_list)
-np_step_list = np.array(mp.step_list)
-
-F_0_opt = np.vstack((F_0_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 0], np_step_list), 3))))
-F_1_opt = np.vstack((F_1_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 1], np_step_list), 3))))
-F_2_opt = np.vstack((F_2_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 2], np_step_list), 3))))
-F_3_opt = np.vstack((F_3_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 3], np_step_list), 3))))
-
-T_guess = mp.t_guess
-p_body_guess = np.transpose(mp.p_guess)
-dp_body_guess = np.transpose(mp.dp_guess)
-Omega_guess = np.transpose(mp.Omega_guess)
-DOmega_guess = np.transpose(mp.DOmega_guess)
-F0_guess = mp.f_ref[:, 0, :]
-F1_guess = mp.f_ref[:, 1, :]
-F2_guess = mp.f_ref[:, 2, :]
-F3_guess = mp.f_ref[:, 3, :]
-F0_guess = np.transpose(F0_guess.reshape(F0_guess.shape[0], -1))
-F1_guess = np.transpose(F1_guess.reshape(F1_guess.shape[0], -1))
-F2_guess = np.transpose(F2_guess.reshape(F2_guess.shape[0], -1))
-F3_guess = np.transpose(F3_guess.reshape(F3_guess.shape[0], -1))
-
-# Print solution
-# print("-----")
-print("objective at solution =", sol_f)
-# print("-----")
-print("primal solution =", sol_x)
-# print("-----")
-# print("dual solution (x) =", sol_lam_x)
-# print("-----")
-# print("dual solution (g) =", sol_lam_g)
-# print("-----")
-
-np.savetxt('solo_12/opt/sol_f.csv', sol_f, delimiter=',')
-np.savetxt('solo_12/opt/sol_x.csv', sol_x, delimiter=',')
-np.savetxt('solo_12/opt/sol_lam_x.csv', sol_lam_x, delimiter=',')
-np.savetxt('solo_12/opt/sol_lam_g.csv', sol_lam_g, delimiter=',')
-
-np.savetxt('solo_12/opt/T_opt.csv', np.transpose(np.array(T_opt)), delimiter=',')
-np.savetxt('solo_12/opt/p_body_opt.csv', p_body_opt, delimiter=',')
-np.savetxt('solo_12/opt/dp_body_opt.csv', dp_body_opt, delimiter=',')
-np.savetxt('solo_12/opt/Omega_opt.csv', Omega_opt, delimiter=',')
-np.savetxt('solo_12/opt/DOmega_opt.csv', DOmega_opt, delimiter=',')
-np.savetxt('solo_12/opt/R_opt.csv', R_opt, delimiter=',')
-np.savetxt('solo_12/initial_guess/R_guess.csv', R_guess, delimiter=',')
-np.savetxt('solo_12/opt/F0_opt.csv', F_0_opt, delimiter=',')
-np.savetxt('solo_12/opt/F1_opt.csv', F_1_opt, delimiter=',')
-np.savetxt('solo_12/opt/F2_opt.csv', F_2_opt, delimiter=',')
-np.savetxt('solo_12/opt/F3_opt.csv', F_3_opt, delimiter=',')
-
-np.savetxt('solo_12/initial_guess/T_guess.csv', T_guess, delimiter=',')
-np.savetxt('solo_12/initial_guess/p_body_guess.csv', p_body_guess, delimiter=',')
-np.savetxt('solo_12/initial_guess/dp_body_guess.csv', dp_body_guess, delimiter=',')
-np.savetxt('solo_12/initial_guess/Omega_guess.csv', Omega_guess, delimiter=',')
-np.savetxt('solo_12/initial_guess/DOmega_guess.csv', DOmega_guess, delimiter=',')
-np.savetxt('solo_12/initial_guess/F0_guess.csv', F0_guess, delimiter=',')
-np.savetxt('solo_12/initial_guess/F1_guess.csv', F1_guess, delimiter=',')
-np.savetxt('solo_12/initial_guess/F2_guess.csv', F2_guess, delimiter=',')
-np.savetxt('solo_12/initial_guess/F3_guess.csv', F3_guess, delimiter=',')
-
-np.savetxt('solo_12/metadata/step_list.csv', np.array(step_list), delimiter=',')
-np.savetxt('solo_12/metadata/contact_list.csv', np.array(mp.cons.contact_list), delimiter=',')
-np.savetxt('solo_12/metadata/p_feet0.csv', p_feet0, delimiter=',')
-np.savetxt('solo_12/metadata/p_feetf.csv', p_feetf, delimiter=',')
-np.savetxt('solo_12/metadata/p_feet_bar.csv', np.array(p_feet_bar), delimiter=',')
-np.savetxt('solo_12/metadata/r.csv', [r], delimiter=',')
+# # Initialize an NLP solver
+# nlp = {'x': x, 'f': J, 'g': constraints.g}
+#
+# jit_options = {"flags": ["-O3"], "verbose": True, "compiler": "gcc"}
+#
+# # Solver options
+# opts = {"expand": True,
+#         # "jit": True,
+#         # "compiler": "shell",
+#         # "jit_options": jit_options,
+#         "detect_simple_bounds": True, "warn_initial_bounds": True,
+#         "ipopt": {"max_iter": 1000,
+#                   "fixed_variable_treatment": "make_constraint",
+#                   "hessian_approximation": "limited-memory",
+#                   "mumps_mem_percent": 10000,
+#                   "print_level": 5}}
+#
+# # Allocate a solver
+# solver = nlpsol("solver", "ipopt", nlp, opts)
+#
+# # Solve the NLP
+# sol = solver(x0=x0, lbg=constraints.lbg, ubg=constraints.ubg, lbx=lbx, ubx=ubx)
+# sol_f = sol["f"]
+# sol_x = sol["x"]
+# sol_lam_x = sol["lam_x"]
+# sol_lam_g = sol["lam_g"]
+#
+# solution = constraints.unpack_all(sol_x, True)
+# T_opt = solution["T"]["opt_x"]
+# p_body_opt = solution["p_body"]["opt_x"]
+# dp_body_opt = solution["dp_body"]["opt_x"]
+# Omega_opt = solution["Omega"]["opt_x"]
+# DOmega_opt = solution["DOmega"]["opt_x"]
+# F_0_opt = solution["F_0"]["opt_x"]
+# F_1_opt = solution["F_1"]["opt_x"]
+# F_2_opt = solution["F_2"]["opt_x"]
+# F_3_opt = solution["F_3"]["opt_x"]
+#
+# T_opt = T_opt.reshape(T_opt.shape[0], -1)
+# p_body_opt = p_body_opt.reshape(p_body_opt.shape[0], -1)
+# dp_body_opt = dp_body_opt.reshape(dp_body_opt.shape[0], -1)
+# Omega_opt = Omega_opt.reshape(Omega_opt.shape[0], -1)
+# DOmega_opt = DOmega_opt.reshape(DOmega_opt.shape[0], -1)
+# R_opt = integrate_omega_history(mp.cons, R0, Omega_opt, T_opt, e_terms)
+#
+# R_opt = R_opt.reshape(mp.cons.num_steps, 9)
+# R_guess = np.array(mp.R_ref).reshape(mp.cons.num_steps, 9)
+#
+# F_0_opt = F_0_opt.reshape(F_0_opt.shape[0], -1)
+# F_1_opt = F_1_opt.reshape(F_1_opt.shape[0], -1)
+# F_2_opt = F_2_opt.reshape(F_2_opt.shape[0], -1)
+# F_3_opt = F_3_opt.reshape(F_3_opt.shape[0], -1)
+# np_con_list = np.array(mp.cons.contact_list)
+# np_step_list = np.array(mp.step_list)
+#
+# F_0_opt = np.vstack((F_0_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 0], np_step_list), 3))))
+# F_1_opt = np.vstack((F_1_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 1], np_step_list), 3))))
+# F_2_opt = np.vstack((F_2_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 2], np_step_list), 3))))
+# F_3_opt = np.vstack((F_3_opt, np.zeros((mp.cons.num_steps - np.dot(np_con_list[:, 3], np_step_list), 3))))
+#
+# T_guess = mp.t_guess
+# p_body_guess = np.transpose(mp.p_guess)
+# dp_body_guess = np.transpose(mp.dp_guess)
+# Omega_guess = np.transpose(mp.Omega_guess)
+# DOmega_guess = np.transpose(mp.DOmega_guess)
+# F0_guess = mp.f_ref[:, 0, :]
+# F1_guess = mp.f_ref[:, 1, :]
+# F2_guess = mp.f_ref[:, 2, :]
+# F3_guess = mp.f_ref[:, 3, :]
+# F0_guess = np.transpose(F0_guess.reshape(F0_guess.shape[0], -1))
+# F1_guess = np.transpose(F1_guess.reshape(F1_guess.shape[0], -1))
+# F2_guess = np.transpose(F2_guess.reshape(F2_guess.shape[0], -1))
+# F3_guess = np.transpose(F3_guess.reshape(F3_guess.shape[0], -1))
+#
+# # Print solution
+# # print("-----")
+# print("objective at solution =", sol_f)
+# # print("-----")
+# print("primal solution =", sol_x)
+# # print("-----")
+# # print("dual solution (x) =", sol_lam_x)
+# # print("-----")
+# # print("dual solution (g) =", sol_lam_g)
+# # print("-----")
+#
+# np.savetxt('solo_12/opt/sol_f.csv', sol_f, delimiter=',')
+# np.savetxt('solo_12/opt/sol_x.csv', sol_x, delimiter=',')
+# np.savetxt('solo_12/opt/sol_lam_x.csv', sol_lam_x, delimiter=',')
+# np.savetxt('solo_12/opt/sol_lam_g.csv', sol_lam_g, delimiter=',')
+#
+# np.savetxt('solo_12/opt/T_opt.csv', np.transpose(np.array(T_opt)), delimiter=',')
+# np.savetxt('solo_12/opt/p_body_opt.csv', p_body_opt, delimiter=',')
+# np.savetxt('solo_12/opt/dp_body_opt.csv', dp_body_opt, delimiter=',')
+# np.savetxt('solo_12/opt/Omega_opt.csv', Omega_opt, delimiter=',')
+# np.savetxt('solo_12/opt/DOmega_opt.csv', DOmega_opt, delimiter=',')
+# np.savetxt('solo_12/opt/R_opt.csv', R_opt, delimiter=',')
+# np.savetxt('solo_12/initial_guess/R_guess.csv', R_guess, delimiter=',')
+# np.savetxt('solo_12/opt/F0_opt.csv', F_0_opt, delimiter=',')
+# np.savetxt('solo_12/opt/F1_opt.csv', F_1_opt, delimiter=',')
+# np.savetxt('solo_12/opt/F2_opt.csv', F_2_opt, delimiter=',')
+# np.savetxt('solo_12/opt/F3_opt.csv', F_3_opt, delimiter=',')
+#
+# np.savetxt('solo_12/initial_guess/T_guess.csv', T_guess, delimiter=',')
+# np.savetxt('solo_12/initial_guess/p_body_guess.csv', p_body_guess, delimiter=',')
+# np.savetxt('solo_12/initial_guess/dp_body_guess.csv', dp_body_guess, delimiter=',')
+# np.savetxt('solo_12/initial_guess/Omega_guess.csv', Omega_guess, delimiter=',')
+# np.savetxt('solo_12/initial_guess/DOmega_guess.csv', DOmega_guess, delimiter=',')
+# np.savetxt('solo_12/initial_guess/F0_guess.csv', F0_guess, delimiter=',')
+# np.savetxt('solo_12/initial_guess/F1_guess.csv', F1_guess, delimiter=',')
+# np.savetxt('solo_12/initial_guess/F2_guess.csv', F2_guess, delimiter=',')
+# np.savetxt('solo_12/initial_guess/F3_guess.csv', F3_guess, delimiter=',')
+#
+# np.savetxt('solo_12/metadata/step_list.csv', np.array(step_list), delimiter=',')
+# np.savetxt('solo_12/metadata/contact_list.csv', np.array(mp.cons.contact_list), delimiter=',')
+# np.savetxt('solo_12/metadata/p_feet0.csv', p_feet0, delimiter=',')
+# np.savetxt('solo_12/metadata/p_feetf.csv', p_feetf, delimiter=',')
+# np.savetxt('solo_12/metadata/p_feet_bar.csv', np.array(p_feet_bar), delimiter=',')
+# np.savetxt('solo_12/metadata/r.csv', [r], delimiter=',')
