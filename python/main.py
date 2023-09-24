@@ -2,7 +2,7 @@ from casadi import *
 import numpy as np
 from scipy.spatial.transform import Rotation as rp
 from scipy.spatial.transform import Slerp
-
+import math
 
 class DesignField:
     def __init__(self, field_name, size, split_flag):
@@ -409,7 +409,7 @@ class MotionProfile:
 def approximate_exp_a(a, deg):
     exp_a = DM(np.zeros((3, 3)))
     for i in range(deg):
-        exp_a = exp_a + (mpower(a, i) / np.math.factorial(i))
+        exp_a = exp_a + (mpower(a, i) / math.factorial(i))
     return exp_a
 
 

@@ -57,10 +57,10 @@ tform = tform2*tform1;
 [configSoln,solnInfo] = ik('L_FOOT', tform, weights, initialguess);
 % show(robot, configSoln);
 result = getTransform(robot, configSoln, 'L_FOOT', 'body');
-rerr = vex(logm(transpose(tform(1:3,1:3))*result(1:3,1:3)));
-disp(transpose(rerr)*rerr)
-disterr = tform(1:3,4)-result(1:3,4);
-disp(disterr)
+% rerr = vex(logm(transpose(tform(1:3,1:3))*result(1:3,1:3)));
+% disp(transpose(rerr)*rerr)
+% disterr = tform(1:3,4)-result(1:3,4);
+% disp(disterr)
 robot2 = importrobot("huron\huron_cheat.urdf","DataFormat","column");
 bothlegs = [configSoln(1:6);configSoln(1);-configSoln(2);configSoln(3:5);-configSoln(6)];
 disp(bothlegs)
